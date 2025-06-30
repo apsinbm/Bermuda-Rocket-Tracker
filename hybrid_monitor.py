@@ -574,11 +574,11 @@ class HybridEcommerceMonitor:
         success_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
         error_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
         
-        # Headers in requested order
+        # Headers in exact requested order
         headers = [
-            "UPC/PLU", "Brand", "Product Name", "Store", "Price Found", 
-            "Price Difference", "Expected Price", "Price Match", "Status", 
-            "Method", "Error", "Response Time", "Checked At", "URL"
+            "upc_plu", "brand", "product_name", "store_type", "expected_price", 
+            "price_found", "price_difference", "price_match", "method", 
+            "status", "error", "response_time", "scraped_at", "url"
         ]
         
         for col, header in enumerate(headers, 1):
@@ -587,22 +587,22 @@ class HybridEcommerceMonitor:
             cell.font = header_font
             cell.alignment = Alignment(horizontal="center")
         
-        # Data rows in requested order
+        # Data rows in exact requested order
         for row_idx, result in enumerate(self.results, 2):
-            ws.cell(row=row_idx, column=1, value=result.get('upc_plu', ''))           # UPC/PLU
-            ws.cell(row=row_idx, column=2, value=result.get('brand', ''))            # Brand
-            ws.cell(row=row_idx, column=3, value=result.get('product_name', ''))     # Product Name
-            ws.cell(row=row_idx, column=4, value=result.get('store_type', '').upper())  # Store
-            ws.cell(row=row_idx, column=5, value=result.get('price_found', ''))      # Price Found
-            ws.cell(row=row_idx, column=6, value=result.get('price_difference', '')) # Price Difference
-            ws.cell(row=row_idx, column=7, value=result.get('expected_price', ''))   # Expected Price
-            ws.cell(row=row_idx, column=8, value=result.get('price_match', ''))      # Price Match
-            ws.cell(row=row_idx, column=9, value=result.get('status', ''))           # Status
-            ws.cell(row=row_idx, column=10, value=result.get('method', ''))          # Method
-            ws.cell(row=row_idx, column=11, value=result.get('error', ''))           # Error
-            ws.cell(row=row_idx, column=12, value=f"{result.get('response_time', 0):.2f}s")  # Response Time
-            ws.cell(row=row_idx, column=13, value=result.get('scraped_at', ''))      # Checked At
-            ws.cell(row=row_idx, column=14, value=result.get('url', ''))             # URL
+            ws.cell(row=row_idx, column=1, value=result.get('upc_plu', ''))           # upc_plu
+            ws.cell(row=row_idx, column=2, value=result.get('brand', ''))            # brand
+            ws.cell(row=row_idx, column=3, value=result.get('product_name', ''))     # product_name
+            ws.cell(row=row_idx, column=4, value=result.get('store_type', '').lower())  # store_type
+            ws.cell(row=row_idx, column=5, value=result.get('expected_price', ''))   # expected_price
+            ws.cell(row=row_idx, column=6, value=result.get('price_found', ''))      # price_found
+            ws.cell(row=row_idx, column=7, value=result.get('price_difference', '')) # price_difference
+            ws.cell(row=row_idx, column=8, value=result.get('price_match', ''))      # price_match
+            ws.cell(row=row_idx, column=9, value=result.get('method', ''))           # method
+            ws.cell(row=row_idx, column=10, value=result.get('status', ''))          # status
+            ws.cell(row=row_idx, column=11, value=result.get('error', ''))           # error
+            ws.cell(row=row_idx, column=12, value=f"{result.get('response_time', 0):.2f}s")  # response_time
+            ws.cell(row=row_idx, column=13, value=result.get('scraped_at', ''))      # scraped_at
+            ws.cell(row=row_idx, column=14, value=result.get('url', ''))             # url
             
             # Color coding
             if result.get('status') == 'success':
@@ -674,8 +674,8 @@ class HybridEcommerceMonitor:
         self.logger.info(f"   Failed: {self.performance_stats['failed_requests']}")
 
 def main():
-    input_file = "/Users/pato/Short test.xlsx"
-    output_file = "/Users/pato/Hybrid_Monitor_Results.xlsx"
+    input_file = "/Users/pato/Downloads/Download June_Top_100_with_URLs_Accurate.xlsx"
+    output_file = "/Users/pato/Full_Monitoring_Results.xlsx"
     
     monitor = HybridEcommerceMonitor(input_file, output_file)
     monitor.run()
