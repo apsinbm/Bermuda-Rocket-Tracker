@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.pytest_cache/
+*.egg-info/
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+hybrid_monitor.log
+api_monitor.log
+
+# Results and temporary files
+*Results.xlsx
+*results.xlsx
+test_*.xlsx
+single_product_test.xlsx
+~$*.xlsx
+
+# Chrome driver cache
+.wdm/
+
+# Screenshots and OCR temp files
+screenshots/
+temp_images/
+EOF < /dev/null
