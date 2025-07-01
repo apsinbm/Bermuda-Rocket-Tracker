@@ -93,8 +93,13 @@ class HybridEcommerceMonitor:
             width, height = random.choice(self.viewport_sizes)
             user_agent = random.choice(self.user_agents)
             
-            # Chrome options
+            # Chrome options - avoid profile conflicts for now  
             options = Options()
+            
+            # Comment out profile for now to avoid conflicts
+            # options.add_argument("--user-data-dir=/Users/pato/Library/Application Support/Google/Chrome")
+            # options.add_argument("--profile-directory=Automation")
+            
             options.add_argument(f'--user-agent={user_agent}')
             options.add_argument(f'--window-size={width},{height}')
             options.add_argument('--disable-web-security')
@@ -283,13 +288,16 @@ class HybridEcommerceMonitor:
             self.logger.error(f"OCR extraction failed: {e}")
             return None
     
-    def scrape_freshop_store(self, url, store_type, product_name):
+    def scrape_freshop_store(self, url, store_type, product_name, driver=None):
         """Scrape Freshop stores with 20-second delays and OCR fallback"""
-        driver = None
+        driver_created_here = False
         try:
-            driver = self.create_driver()
+            # Use provided driver or create new one
             if not driver:
-                return {'error': 'Failed to create driver', 'method': 'scraping'}
+                driver = self.create_driver()
+                driver_created_here = True
+                if not driver:
+                    return {'error': 'Failed to create driver', 'method': 'scraping'}
             
             self.logger.info(f"🔍 Scraping {store_type.upper()}: {product_name}")
             
@@ -400,7 +408,8 @@ class HybridEcommerceMonitor:
             return {'error': str(e), 'method': 'scraping'}
         
         finally:
-            if driver:
+            # Only close driver if we created it here (not for persistent MarketPlace sessions)
+            if driver and driver_created_here:
                 try:
                     driver.quit()
                 except:
@@ -426,7 +435,7 @@ class HybridEcommerceMonitor:
             self.logger.error(f"Error with Pronto API for {url}: {e}")
             return {'error': str(e), 'method': 'api'}
     
-    def process_single_url(self, url, store_type, product_info, product_name):
+    def process_single_url(self, url, store_type, product_info, product_name, driver=None):
         """Process a single URL using appropriate method"""
         if not url or pd.isna(url):
             return {
@@ -451,7 +460,7 @@ class HybridEcommerceMonitor:
                 api_result = self.get_pronto_data(url, product_name)
             else:
                 # Use scraping for Freshop stores
-                api_result = self.scrape_freshop_store(url, store_type, product_name)
+                api_result = self.scrape_freshop_store(url, store_type, product_name, driver)
             
             response_time = time.time() - start_time
             
@@ -520,7 +529,7 @@ class HybridEcommerceMonitor:
             }
     
     def monitor_products(self):
-        """Monitor all products in the Excel file"""
+        """Monitor all products in the Excel file with persistent Chrome for MarketPlace"""
         try:
             df = pd.read_excel(self.input_file)
             self.logger.info(f"Loaded {len(df)} products from {self.input_file}")
@@ -528,13 +537,72 @@ class HybridEcommerceMonitor:
             start_time = time.time()
             site_columns = ['MP', 'HH', 'Drop It', 'Miles', 'Pronto']
             
+            # PERSISTENT CHROME FOR MARKETPLACE
+            mp_driver = None
+            mp_products = []
+            
+            # First pass: collect all MarketPlace products
+            for index, row in df.iterrows():
+                product_info = row.to_dict()
+                mp_url = product_info.get('MP')
+                if mp_url and not pd.isna(mp_url):
+                    product_name = f"{product_info.get('Brand', '')} {product_info.get('Long Description', '')}".strip()
+                    mp_products.append((index, product_info, product_name, mp_url))
+            
+            # Process MarketPlace products with persistent Chrome
+            if mp_products:
+                self.logger.info(f"\n🏪 MARKETPLACE - Processing {len(mp_products)} products with PERSISTENT CHROME")
+                try:
+                    mp_driver = self.create_driver()
+                    if mp_driver:
+                        self.logger.info("✅ MarketPlace Chrome opened - will stay open for all MP products")
+                        
+                        for i, (index, product_info, product_name, mp_url) in enumerate(mp_products, 1):
+                            self.logger.info(f"\n📦 MP Product {i}/{len(mp_products)}: {product_name}")
+                            
+                            if i == 1:
+                                self.logger.info("🔧 FIRST MP PRODUCT - Manual setup may be needed")
+                                self.logger.info("   Please ensure you're logged in and Hamilton store is selected")
+                                # Give extra time for first product setup
+                                time.sleep(2)
+                            
+                            result = self.process_single_url(mp_url, 'mp', product_info, product_name, mp_driver)
+                            self.results.append(result)
+                            
+                            # Log result
+                            if result['status'] == 'success':
+                                method = result.get('method', 'unknown')
+                                self.logger.info(f"    ✅ MP Success: ${result['price_found']}")
+                            else:
+                                self.logger.warning(f"    ❌ MP Failed: {result.get('error', 'Unknown error')}")
+                            
+                            # Small delay between MP products
+                            if i < len(mp_products):
+                                time.sleep(random.uniform(2, 4))
+                        
+                        self.logger.info("🎉 All MarketPlace products completed with persistent Chrome!")
+                    else:
+                        self.logger.error("❌ Failed to create MarketPlace driver")
+                        
+                except Exception as e:
+                    self.logger.error(f"Error in MarketPlace persistent scraping: {e}")
+                finally:
+                    if mp_driver:
+                        try:
+                            mp_driver.quit()
+                            self.logger.info("🔒 MarketPlace Chrome closed")
+                        except:
+                            pass
+            
+            # Process other stores (non-MarketPlace) - existing logic
             for index, row in df.iterrows():
                 product_info = row.to_dict()
                 product_name = f"{product_info.get('Brand', '')} {product_info.get('Long Description', '')}".strip()
                 
                 self.logger.info(f"\n📦 Processing Product {index + 1}: {product_name}")
                 
-                for site_col in site_columns:
+                # Process non-MarketPlace stores
+                for site_col in ['HH', 'Drop It', 'Miles', 'Pronto']:
                     url = product_info.get(site_col)
                     store_type = site_col.lower().replace(' ', '').replace('dropit', 'dropit')
                     if store_type == 'dropit':
