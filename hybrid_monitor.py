@@ -163,6 +163,228 @@ class HybridEcommerceMonitor:
         except Exception as e:
             self.logger.debug(f"Scrolling failed: {e}")
     
+    def extract_comprehensive_pricing(self, driver):
+        """Extract comprehensive pricing information including sale prices, regular prices, and sale dates"""
+        pricing_info = {
+            'current_price': None,
+            'sale_price': None,
+            'regular_price': None,
+            'original_price': None,
+            'sale_percentage': None,
+            'sale_start_date': None,
+            'sale_end_date': None,
+            'is_on_sale': False,
+            'price_method': 'none'
+        }
+        
+        try:
+            # First check if this is MarketPlace - they have specific CSS classes
+            current_url = driver.current_url
+            if 'marketplace.bm' in current_url:
+                return self._extract_marketplace_pricing(driver)
+            else:
+                return self._extract_generic_pricing(driver)
+        except Exception as e:
+            self.logger.debug(f"Comprehensive pricing extraction failed: {e}")
+            return pricing_info
+    
+    def _extract_marketplace_pricing(self, driver):
+        """Extract pricing specifically for MarketPlace using their CSS classes"""
+        pricing_info = {
+            'current_price': None,
+            'sale_price': None,
+            'regular_price': None,
+            'original_price': None,
+            'sale_percentage': None,
+            'sale_start_date': None,
+            'sale_end_date': None,
+            'is_on_sale': False,
+            'price_method': 'marketplace_specific'
+        }
+        
+        try:
+            # Look for sale price using MarketPlace-specific classes
+            sale_elements = driver.find_elements(By.CSS_SELECTOR, '.fp-item-sale strong, .fp-item-sale')
+            if sale_elements:
+                for elem in sale_elements:
+                    text = elem.text.strip()
+                    match = re.search(r'\$(\d+\.?\d*)', text)
+                    if match:
+                        pricing_info['sale_price'] = float(match.group(1))
+                        pricing_info['current_price'] = pricing_info['sale_price']
+                        pricing_info['is_on_sale'] = True
+                        break
+                        
+            # Look for regular/base price using MarketPlace-specific classes
+            regular_elements = driver.find_elements(By.CSS_SELECTOR, '.fp-item-base-price')
+            if regular_elements:
+                for elem in regular_elements:
+                    text = elem.text.strip()
+                    match = re.search(r'\$(\d+\.?\d*)', text)
+                    if match:
+                        price = float(match.group(1))
+                        # Check if this element is crossed out (strikethrough)
+                        try:
+                            computed_style = driver.execute_script(
+                                "return window.getComputedStyle(arguments[0]).textDecoration;", elem
+                            )
+                            if 'line-through' in (computed_style or ''):
+                                pricing_info['regular_price'] = price
+                                pricing_info['original_price'] = price
+                            elif not pricing_info['current_price']:  # No sale price found
+                                pricing_info['current_price'] = price
+                        except:
+                            # If we can't check strikethrough, use context
+                            parent_text = elem.find_element(By.XPATH, './..').text.lower()
+                            if 'original' in parent_text and pricing_info['sale_price']:
+                                pricing_info['regular_price'] = price
+                                pricing_info['original_price'] = price
+                            elif not pricing_info['current_price']:
+                                pricing_info['current_price'] = price
+                        break
+                        
+            # Extract sale dates from MarketPlace format (06/25/25 - 07/06/25)
+            sale_date_elements = driver.find_elements(By.CSS_SELECTOR, '.fp-item-sale-date, .fp-item-sale')
+            for elem in sale_date_elements:
+                text = elem.text
+                date_match = re.search(r'\((\d{2}/\d{2}/\d{2})\s*-\s*(\d{2}/\d{2}/\d{2})\)', text)
+                if date_match:
+                    pricing_info['sale_start_date'] = date_match.group(1)
+                    pricing_info['sale_end_date'] = date_match.group(2)
+                    break
+                    
+            # Calculate sale percentage if we have both prices
+            if pricing_info['sale_price'] and pricing_info['regular_price']:
+                sale_pct = ((pricing_info['regular_price'] - pricing_info['sale_price']) / pricing_info['regular_price']) * 100
+                pricing_info['sale_percentage'] = round(sale_pct, 1)
+                
+            return pricing_info
+            
+        except Exception as e:
+            self.logger.debug(f"MarketPlace pricing extraction failed: {e}")
+            return pricing_info
+    
+    def _extract_generic_pricing(self, driver):
+        """Extract pricing for non-MarketPlace stores using generic selectors"""
+        pricing_info = {
+            'current_price': None,
+            'sale_price': None,
+            'regular_price': None,
+            'original_price': None,
+            'sale_percentage': None,
+            'sale_start_date': None,
+            'sale_end_date': None,
+            'is_on_sale': False,
+            'price_method': 'generic'
+        }
+        
+        try:
+            # Simplified generic pricing for stores like Pronto
+            # Look for strikethrough prices (regular prices)
+            strikethrough_elements = driver.execute_script("""
+                var elements = Array.from(document.querySelectorAll('*'));
+                return elements.filter(el => {
+                    var style = window.getComputedStyle(el);
+                    var text = el.textContent;
+                    return (style.textDecoration.includes('line-through') || 
+                           el.tagName === 'DEL' || el.tagName === 'S') && 
+                           text.includes('$') && el.offsetParent !== null;
+                }).map(el => ({
+                    text: el.textContent.trim(),
+                    tag: el.tagName
+                }));
+            """)
+            
+            # Extract regular price from strikethrough elements
+            for elem in strikethrough_elements:
+                text = elem['text']
+                match = re.search(r'\$(\d+\.?\d*)', text)
+                if match:
+                    pricing_info['regular_price'] = float(match.group(1))
+                    pricing_info['original_price'] = pricing_info['regular_price']
+                    break
+            
+            # Look for sale percentage indicators (like "35% OFF")
+            sale_elements = driver.execute_script("""
+                var elements = Array.from(document.querySelectorAll('*'));
+                return elements.filter(el => {
+                    var text = el.textContent.toLowerCase();
+                    return text.match(/\\d+%\\s*(off|sale)/) && el.offsetParent !== null;
+                }).map(el => el.textContent.trim());
+            """)
+            
+            for text in sale_elements:
+                percentage_match = re.search(r'(\d+)%\s*(off|sale)', text, re.IGNORECASE)
+                if percentage_match:
+                    pricing_info['sale_percentage'] = int(percentage_match.group(1))
+                    pricing_info['is_on_sale'] = True
+                    break
+            
+            # Look for current price (largest, most prominent text)
+            price_elements = driver.find_elements(By.CSS_SELECTOR, 'h1, h2, h3, .price, [class*="price"]')
+            best_price = None
+            best_score = 0
+            
+            for elem in price_elements:
+                try:
+                    text = elem.text.strip()
+                    match = re.search(r'\$(\d+\.?\d*)', text)
+                    if match:
+                        price = float(match.group(1))
+                        if 0.01 <= price <= 1000:
+                            # Score based on element prominence
+                            score = 0
+                            if elem.tag_name in ['h1', 'h2', 'h3']:
+                                score += 10
+                            
+                            # Check font size and color via JavaScript
+                            try:
+                                element_info = driver.execute_script("""
+                                    var style = window.getComputedStyle(arguments[0]);
+                                    return {
+                                        fontSize: parseInt(style.fontSize),
+                                        color: style.color,
+                                        fontWeight: style.fontWeight
+                                    };
+                                """, elem)
+                                
+                                if element_info['fontSize'] > 16:
+                                    score += element_info['fontSize'] // 4
+                                if 'bold' in str(element_info['fontWeight']) or int(element_info.get('fontWeight', 400)) >= 600:
+                                    score += 5
+                                if 'blue' in element_info.get('color', '').lower():
+                                    score += 5
+                            except:
+                                pass
+                            
+                            if score > best_score:
+                                best_score = score
+                                best_price = price
+                except:
+                    continue
+            
+            if best_price:
+                pricing_info['current_price'] = best_price
+                if pricing_info['is_on_sale']:
+                    pricing_info['sale_price'] = best_price
+                    
+            # Calculate sale percentage if we have both prices but not explicit percentage
+            if (pricing_info['regular_price'] and pricing_info['current_price'] and 
+                pricing_info['regular_price'] > pricing_info['current_price'] and 
+                not pricing_info['sale_percentage']):
+                sale_pct = ((pricing_info['regular_price'] - pricing_info['current_price']) / pricing_info['regular_price']) * 100
+                pricing_info['sale_percentage'] = round(sale_pct, 1)
+                pricing_info['is_on_sale'] = True
+                pricing_info['sale_price'] = pricing_info['current_price']
+                
+            pricing_info['price_method'] = 'generic_scraping'
+                
+        except Exception as e:
+            self.logger.debug(f"Generic pricing extraction failed: {e}")
+            pricing_info['price_method'] = 'extraction_failed'
+        
+        return pricing_info
+    
     def handle_store_selection(self, driver, store_type):
         """Handle store selection for MarketPlace and Drop It"""
         try:
@@ -322,66 +544,13 @@ class HybridEcommerceMonitor:
             self.logger.info(f"Waiting 20 seconds for {store_type.upper()} dynamic content...")
             time.sleep(20)
             
-            # Try multiple price selectors
-            price_selectors = [
-                # Common Freshop price selectors
-                '.price',
-                '.product-price',
-                '.current-price',
-                '.sale-price',
-                '.unit-price',
-                '[data-price]',
-                '.price-value',
-                '.price-amount',
-                '.product-price-value',
-                # Broader selectors
-                '*[class*="price"]',
-                '*[id*="price"]',
-                'span:contains("$")',
-                'div:contains("$")'
-            ]
+            # Use comprehensive pricing extraction to detect sales, regular prices, and dates
+            pricing_info = self.extract_comprehensive_pricing(driver)
+            price_found = pricing_info.get('current_price')
+            method_used = 'comprehensive_scraping' if price_found else 'scraping'
             
-            price_found = None
-            method_used = 'scraping'
-            
-            # Try CSS selectors first
-            for selector in price_selectors:
-                try:
-                    if ':contains' in selector:
-                        # Use JavaScript for :contains selector
-                        elements = driver.execute_script(f"""
-                            return Array.from(document.querySelectorAll('*')).filter(
-                                el => el.textContent.includes('$') && 
-                                      el.offsetParent !== null &&
-                                      el.textContent.trim().length < 50
-                            );
-                        """)
-                    else:
-                        elements = driver.find_elements(By.CSS_SELECTOR, selector)
-                    
-                    for element in elements:
-                        try:
-                            text = element.text.strip() if hasattr(element, 'text') else element.get('textContent', '')
-                            if not text and hasattr(element, 'get_attribute'):
-                                text = element.get_attribute('data-price') or element.get_attribute('value') or ''
-                            
-                            # Extract price from text
-                            price_match = re.search(r'\$\s*(\d+\.?\d*)', text)
-                            if price_match:
-                                price = float(price_match.group(1))
-                                if 0.01 <= price <= 1000:  # Reasonable price range
-                                    price_found = price
-                                    self.logger.info(f"✓ Found price with selector {selector}: ${price}")
-                                    break
-                        except (ValueError, AttributeError, Exception):
-                            continue
-                    
-                    if price_found:
-                        break
-                        
-                except Exception as e:
-                    self.logger.debug(f"Selector {selector} failed: {e}")
-                    continue
+            # Debug: Log the comprehensive pricing data
+            self.logger.info(f"Debug - pricing_info contents: {pricing_info}")
             
             # If scraping failed, try OCR
             if not price_found and self.ocr_available:
@@ -392,13 +561,29 @@ class HybridEcommerceMonitor:
                     self.performance_stats['successful_ocr'] += 1
             
             if price_found:
-                if method_used == 'scraping':
+                if method_used in ['scraping', 'comprehensive_scraping']:
                     self.performance_stats['successful_scrapes'] += 1
-                return {
+                
+                # Return comprehensive pricing information
+                result = {
                     'price_found': price_found,
                     'method': method_used,
                     'status': 'success'
                 }
+                
+                # Add comprehensive pricing data if available
+                if method_used == 'comprehensive_scraping':
+                    result.update({
+                        'sale_price': pricing_info.get('sale_price'),
+                        'regular_price': pricing_info.get('regular_price'),
+                        'original_price': pricing_info.get('original_price'),
+                        'sale_percentage': pricing_info.get('sale_percentage'),
+                        'sale_start_date': pricing_info.get('sale_start_date'),
+                        'sale_end_date': pricing_info.get('sale_end_date'),
+                        'is_on_sale': pricing_info.get('is_on_sale', False)
+                    })
+                
+                return result
             else:
                 self.logger.warning(f"❌ No price found for {store_type.upper()}: {product_name}")
                 return {'error': 'No price found', 'method': 'scraping+ocr'}
@@ -455,12 +640,9 @@ class HybridEcommerceMonitor:
         self.performance_stats['total_requests'] += 1
         
         try:
-            # Use API for Pronto, scraping for others
-            if store_type == 'pronto':
-                api_result = self.get_pronto_data(url, product_name)
-            else:
-                # Use scraping for Freshop stores
-                api_result = self.scrape_freshop_store(url, store_type, product_name, driver)
+            # Use comprehensive web scraping for all stores (including Pronto) to detect sales
+            # This enables sale detection, regular price capture, and percentage calculations for all stores
+            api_result = self.scrape_freshop_store(url, store_type, product_name, driver)
             
             response_time = time.time() - start_time
             
@@ -491,6 +673,13 @@ class HybridEcommerceMonitor:
                     'price_found': api_result.get('price_found'),
                     'error': None
                 })
+                
+                # Preserve comprehensive pricing data from scraping
+                comprehensive_fields = ['sale_price', 'regular_price', 'original_price', 
+                                       'sale_percentage', 'sale_start_date', 'sale_end_date', 'is_on_sale']
+                for field in comprehensive_fields:
+                    if field in api_result:
+                        result[field] = api_result[field]
                 
                 # Calculate price match
                 expected_price = result['expected_price']
@@ -642,10 +831,12 @@ class HybridEcommerceMonitor:
         success_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
         error_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
         
-        # Headers in exact requested order
+        # Headers with enhanced pricing information
         headers = [
             "upc_plu", "brand", "product_name", "store_type", "expected_price", 
-            "price_found", "price_difference", "price_match", "method", 
+            "price_found", "sale_price", "regular_price", "price_difference", 
+            "expected_vs_found_percentage", "sale_percentage", "price_match", 
+            "is_on_sale", "sale_start_date", "sale_end_date", "method", 
             "status", "error", "response_time", "scraped_at", "url"
         ]
         
@@ -655,29 +846,50 @@ class HybridEcommerceMonitor:
             cell.font = header_font
             cell.alignment = Alignment(horizontal="center")
         
-        # Data rows in exact requested order
+        # Data rows with enhanced pricing information
         for row_idx, result in enumerate(self.results, 2):
-            ws.cell(row=row_idx, column=1, value=result.get('upc_plu', ''))           # upc_plu
-            ws.cell(row=row_idx, column=2, value=result.get('brand', ''))            # brand
-            ws.cell(row=row_idx, column=3, value=result.get('product_name', ''))     # product_name
-            ws.cell(row=row_idx, column=4, value=result.get('store_type', '').lower())  # store_type
-            ws.cell(row=row_idx, column=5, value=result.get('expected_price', ''))   # expected_price
-            ws.cell(row=row_idx, column=6, value=result.get('price_found', ''))      # price_found
-            ws.cell(row=row_idx, column=7, value=result.get('price_difference', '')) # price_difference
-            ws.cell(row=row_idx, column=8, value=result.get('price_match', ''))      # price_match
-            ws.cell(row=row_idx, column=9, value=result.get('method', ''))           # method
-            ws.cell(row=row_idx, column=10, value=result.get('status', ''))          # status
-            ws.cell(row=row_idx, column=11, value=result.get('error', ''))           # error
-            ws.cell(row=row_idx, column=12, value=f"{result.get('response_time', 0):.2f}s")  # response_time
-            ws.cell(row=row_idx, column=13, value=result.get('scraped_at', ''))      # scraped_at
-            ws.cell(row=row_idx, column=14, value=result.get('url', ''))             # url
+            # Calculate expected vs found percentage
+            expected_vs_found_percentage = None
+            expected_price = result.get('expected_price')
+            price_found = result.get('price_found')
             
-            # Color coding
+            if expected_price and price_found:
+                try:
+                    expected = float(expected_price)
+                    found = float(price_found)
+                    if expected > 0:
+                        expected_vs_found_percentage = round(((found - expected) / expected) * 100, 1)
+                except (ValueError, TypeError):
+                    pass
+            
+            ws.cell(row=row_idx, column=1, value=result.get('upc_plu', ''))                    # upc_plu
+            ws.cell(row=row_idx, column=2, value=result.get('brand', ''))                     # brand
+            ws.cell(row=row_idx, column=3, value=result.get('product_name', ''))              # product_name
+            ws.cell(row=row_idx, column=4, value=result.get('store_type', '').lower())        # store_type
+            ws.cell(row=row_idx, column=5, value=result.get('expected_price', ''))            # expected_price
+            ws.cell(row=row_idx, column=6, value=result.get('price_found', ''))               # price_found
+            ws.cell(row=row_idx, column=7, value=result.get('sale_price', ''))                # sale_price
+            ws.cell(row=row_idx, column=8, value=result.get('regular_price', ''))             # regular_price
+            ws.cell(row=row_idx, column=9, value=result.get('price_difference', ''))          # price_difference
+            ws.cell(row=row_idx, column=10, value=expected_vs_found_percentage)               # expected_vs_found_percentage
+            ws.cell(row=row_idx, column=11, value=result.get('sale_percentage', ''))          # sale_percentage
+            ws.cell(row=row_idx, column=12, value=result.get('price_match', ''))              # price_match
+            ws.cell(row=row_idx, column=13, value=result.get('is_on_sale', ''))               # is_on_sale
+            ws.cell(row=row_idx, column=14, value=result.get('sale_start_date', ''))          # sale_start_date
+            ws.cell(row=row_idx, column=15, value=result.get('sale_end_date', ''))            # sale_end_date
+            ws.cell(row=row_idx, column=16, value=result.get('method', ''))                   # method
+            ws.cell(row=row_idx, column=17, value=result.get('status', ''))                   # status
+            ws.cell(row=row_idx, column=18, value=result.get('error', ''))                    # error
+            ws.cell(row=row_idx, column=19, value=f"{result.get('response_time', 0):.2f}s")   # response_time
+            ws.cell(row=row_idx, column=20, value=result.get('scraped_at', ''))               # scraped_at
+            ws.cell(row=row_idx, column=21, value=result.get('url', ''))                      # url
+            
+            # Color coding for all 21 columns
             if result.get('status') == 'success':
-                for col in range(1, 15):  # Updated to 14 columns
+                for col in range(1, 22):  # Updated to 21 columns
                     ws.cell(row=row_idx, column=col).fill = success_fill
             else:
-                for col in range(1, 15):  # Updated to 14 columns
+                for col in range(1, 22):  # Updated to 21 columns
                     ws.cell(row=row_idx, column=col).fill = error_fill
         
         # Auto-adjust column widths
