@@ -234,11 +234,14 @@ class HybridEcommerceMonitor:
             # Step 1: Look for regular/base price first (crossed out)
             regular_price = None
             regular_elements = driver.find_elements(By.CSS_SELECTOR, '.fp-item-base-price')
+            self.logger.info(f"🔍 Found {len(regular_elements)} base price elements")
             for elem in regular_elements:
                 text = elem.text.strip()
+                self.logger.info(f"   Base price text: '{text}'")
                 match = re.search(r'\$(\d+\.?\d*)', text)
                 if match:
                     price = float(match.group(1))
+                    self.logger.info(f"   Extracted price: ${price}")
                     # Check if this element has strikethrough
                     try:
                         computed_style = driver.execute_script(
@@ -248,13 +251,17 @@ class HybridEcommerceMonitor:
                             regular_price = price
                             pricing_info['regular_price'] = price
                             pricing_info['original_price'] = price
-                            self.logger.info(f"✓ MarketPlace regular price found: ${price}")
+                            self.logger.info(f"✓ MarketPlace regular price found (strikethrough): ${price}")
                             break
                     except:
-                        # Fallback: if we found a base price, it's likely the regular price
+                        pass
+                    
+                    # For regular products (no sale), use first valid price as regular price
+                    if not regular_price and 0.01 <= price <= 1000:
                         regular_price = price
                         pricing_info['regular_price'] = price
                         pricing_info['original_price'] = price
+                        self.logger.info(f"✓ MarketPlace regular price found: ${price}")
                         break
             
             # Step 2: Look for sale price using MarketPlace-specific classes  
@@ -320,6 +327,11 @@ class HybridEcommerceMonitor:
                     pricing_info['sale_end_date'] = date_match.group(2)
                     break
                     
+            # CRITICAL FIX: If we have regular price but no sale price, use regular price as current price
+            if pricing_info['regular_price'] and not pricing_info['current_price']:
+                pricing_info['current_price'] = pricing_info['regular_price']
+                self.logger.info(f"✓ MarketPlace current price: ${pricing_info['regular_price']} (no sale)")
+            
             # Calculate sale percentage if we have both prices
             if pricing_info['sale_price'] and pricing_info['regular_price']:
                 sale_pct = ((pricing_info['regular_price'] - pricing_info['sale_price']) / pricing_info['regular_price']) * 100
@@ -502,6 +514,72 @@ class HybridEcommerceMonitor:
             pricing_info['price_method'] = 'extraction_failed'
         
         return pricing_info
+    
+    def select_hamilton_store(self, driver):
+        """Select Hamilton store at the beginning of MarketPlace session"""
+        try:
+            # Step 1: Go to MarketPlace homepage
+            self.logger.info("📍 Loading MarketPlace homepage...")
+            driver.get("https://www.marketplace.bm")
+            time.sleep(5)
+            
+            # Step 2: Look for and click "My Store"
+            store_selectors = [
+                "//a[contains(text(), 'My Store')]",
+                "//button[contains(text(), 'My Store')]", 
+                "//div[contains(text(), 'My Store')]"
+            ]
+            
+            store_button = None
+            for selector in store_selectors:
+                try:
+                    elements = driver.find_elements(By.XPATH, selector)
+                    if elements:
+                        store_button = elements[0]
+                        self.logger.info(f"✓ Found store selector")
+                        break
+                except:
+                    continue
+            
+            if store_button:
+                self.logger.info("🔄 Clicking store selector...")
+                store_button.click()
+                time.sleep(3)
+                
+                # Step 3: Look for Hamilton store option and click it
+                hamilton_selectors = [
+                    "//a[contains(text(), 'Hamilton')]",
+                    "//button[contains(text(), 'Hamilton')]",
+                    "//div[contains(text(), 'Hamilton')]",
+                    "//span[contains(text(), 'Hamilton')]"
+                ]
+                
+                hamilton_found = False
+                for selector in hamilton_selectors:
+                    try:
+                        elements = driver.find_elements(By.XPATH, selector)
+                        if elements:
+                            self.logger.info("✓ Found Hamilton store option")
+                            elements[0].click()
+                            time.sleep(3)
+                            hamilton_found = True
+                            break
+                    except:
+                        continue
+                
+                if hamilton_found:
+                    self.logger.info("✅ Hamilton store selected successfully")
+                    return True
+                else:
+                    self.logger.warning("⚠️  Hamilton store option not found")
+                    return False
+            else:
+                self.logger.warning("⚠️  Store selector not found")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"❌ Store selection failed: {e}")
+            return False
     
     def handle_store_selection(self, driver, store_type):
         """Handle store selection for MarketPlace and Drop It"""
@@ -862,14 +940,20 @@ class HybridEcommerceMonitor:
                     if mp_driver:
                         self.logger.info("✅ MarketPlace Chrome opened - will stay open for all MP products")
                         
+                        # CRITICAL FIX: Select Hamilton store BEFORE processing any products
+                        self.logger.info("🏪 Selecting Hamilton store...")
+                        if self.select_hamilton_store(mp_driver):
+                            self.logger.info("✅ Hamilton store selected successfully")
+                        else:
+                            self.logger.warning("⚠️  Hamilton store selection may have failed")
+                        
                         for i, (index, product_info, product_name, mp_url) in enumerate(mp_products, 1):
                             self.logger.info(f"\n📦 MP Product {i}/{len(mp_products)}: {product_name}")
                             
                             if i == 1:
-                                self.logger.info("🔧 FIRST MP PRODUCT - Manual setup may be needed")
-                                self.logger.info("   Please ensure you're logged in and Hamilton store is selected")
-                                # Give extra time for first product setup
-                                time.sleep(2)
+                                self.logger.info("🔧 FIRST MP PRODUCT - Store should already be selected")
+                                # Reduced delay since store is already selected
+                                time.sleep(1)
                             
                             result = self.process_single_url(mp_url, 'mp', product_info, product_name, mp_driver)
                             self.add_result_with_autosave(result)
