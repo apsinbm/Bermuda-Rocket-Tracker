@@ -918,70 +918,12 @@ class HybridEcommerceMonitor:
             self.logger.info(f"Loaded {len(df)} products from {self.input_file}")
             
             start_time = time.time()
-            site_columns = ['MP', 'HH', 'Drop It', 'Miles', 'Pronto']
+            # SKIP MARKETPLACE - Focus on other 4 stores tonight
+            site_columns = ['HH', 'Drop It', 'Miles', 'Pronto']
             
-            # PERSISTENT CHROME FOR MARKETPLACE
-            mp_driver = None
-            mp_products = []
+            self.logger.info("🚫 SKIPPING MARKETPLACE TONIGHT - Focusing on HH, Drop It, Miles, and Pronto")
             
-            # First pass: collect all MarketPlace products
-            for index, row in df.iterrows():
-                product_info = row.to_dict()
-                mp_url = product_info.get('MP')
-                if mp_url and not pd.isna(mp_url):
-                    product_name = f"{product_info.get('Brand', '')} {product_info.get('Long Description', '')}".strip()
-                    mp_products.append((index, product_info, product_name, mp_url))
-            
-            # Process MarketPlace products with persistent Chrome
-            if mp_products:
-                self.logger.info(f"\n🏪 MARKETPLACE - Processing {len(mp_products)} products with PERSISTENT CHROME")
-                try:
-                    mp_driver = self.create_driver()
-                    if mp_driver:
-                        self.logger.info("✅ MarketPlace Chrome opened - will stay open for all MP products")
-                        
-                        # CRITICAL FIX: Select Hamilton store BEFORE processing any products
-                        self.logger.info("🏪 Selecting Hamilton store...")
-                        if self.select_hamilton_store(mp_driver):
-                            self.logger.info("✅ Hamilton store selected successfully")
-                        else:
-                            self.logger.warning("⚠️  Hamilton store selection may have failed")
-                        
-                        for i, (index, product_info, product_name, mp_url) in enumerate(mp_products, 1):
-                            self.logger.info(f"\n📦 MP Product {i}/{len(mp_products)}: {product_name}")
-                            
-                            if i == 1:
-                                self.logger.info("🔧 FIRST MP PRODUCT - Store should already be selected")
-                                # Reduced delay since store is already selected
-                                time.sleep(1)
-                            
-                            result = self.process_single_url(mp_url, 'mp', product_info, product_name, mp_driver)
-                            self.add_result_with_autosave(result)
-                            
-                            # Log result
-                            if result['status'] == 'success':
-                                method = result.get('method', 'unknown')
-                                self.logger.info(f"    ✅ MP Success: ${result['price_found']}")
-                            else:
-                                self.logger.warning(f"    ❌ MP Failed: {result.get('error', 'Unknown error')}")
-                            
-                            # Small delay between MP products
-                            if i < len(mp_products):
-                                time.sleep(random.uniform(2, 4))
-                        
-                        self.logger.info("🎉 All MarketPlace products completed with persistent Chrome!")
-                    else:
-                        self.logger.error("❌ Failed to create MarketPlace driver")
-                        
-                except Exception as e:
-                    self.logger.error(f"Error in MarketPlace persistent scraping: {e}")
-                finally:
-                    if mp_driver:
-                        try:
-                            mp_driver.quit()
-                            self.logger.info("🔒 MarketPlace Chrome closed")
-                        except:
-                            pass
+            # No MarketPlace processing tonight
             
             # Process other stores (non-MarketPlace) - existing logic
             for index, row in df.iterrows():
@@ -993,11 +935,21 @@ class HybridEcommerceMonitor:
                 # Process non-MarketPlace stores
                 for site_col in ['HH', 'Drop It', 'Miles', 'Pronto']:
                     url = product_info.get(site_col)
-                    store_type = site_col.lower().replace(' ', '').replace('dropit', 'dropit')
-                    if store_type == 'dropit':
-                        store_type = 'dropit'
+                    
+                    # Clean store type mapping
+                    store_type_mapping = {
+                        'HH': 'hh',
+                        'Drop It': 'dropit', 
+                        'Miles': 'miles',
+                        'Pronto': 'pronto'
+                    }
+                    store_type = store_type_mapping.get(site_col, site_col.lower())
                     
                     self.logger.info(f"  🏪 Store: {site_col}")
+                    
+                    if not url or pd.isna(url):
+                        self.logger.warning(f"    ❌ Failed: No URL provided")
+                        continue
                     
                     result = self.process_single_url(url, store_type, product_info, product_name)
                     self.add_result_with_autosave(result)
