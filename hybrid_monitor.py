@@ -8,10 +8,10 @@ Includes OCR fallback capability
 
 import pandas as pd
 import time
+from datetime import datetime
 import logging
 import random
 import re
-from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -38,6 +38,8 @@ class HybridEcommerceMonitor:
         self.input_file = input_file
         self.output_file = output_file
         self.results = []
+        self.auto_save_counter = 0
+        self.auto_save_interval = 10  # Save every 10 results
         
         # Setup logging
         logging.basicConfig(
@@ -85,6 +87,30 @@ class HybridEcommerceMonitor:
             'successful_ocr': 0,
             'failed_requests': 0
         }
+    
+    def auto_save_results(self):
+        """Auto-save results every 10 processed items"""
+        try:
+            if len(self.results) > 0:
+                # Create auto-save filename with timestamp
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                auto_save_file = f"AutoSave_{timestamp}_{len(self.results)}_results.xlsx"
+                
+                # Generate report with current results
+                self.generate_report(auto_save_file)
+                self.logger.info(f"🔄 Auto-saved {len(self.results)} results to {auto_save_file}")
+        except Exception as e:
+            self.logger.warning(f"Auto-save failed: {e}")
+    
+    def add_result_with_autosave(self, result):
+        """Add result and trigger auto-save if needed"""
+        self.results.append(result)
+        self.auto_save_counter += 1
+        
+        # Auto-save every 10 results
+        if self.auto_save_counter >= self.auto_save_interval:
+            self.auto_save_results()
+            self.auto_save_counter = 0
     
     def create_driver(self):
         """Create a stealth Chrome driver with random configurations"""
@@ -846,7 +872,7 @@ class HybridEcommerceMonitor:
                                 time.sleep(2)
                             
                             result = self.process_single_url(mp_url, 'mp', product_info, product_name, mp_driver)
-                            self.results.append(result)
+                            self.add_result_with_autosave(result)
                             
                             # Log result
                             if result['status'] == 'success':
@@ -890,7 +916,7 @@ class HybridEcommerceMonitor:
                     self.logger.info(f"  🏪 Store: {site_col}")
                     
                     result = self.process_single_url(url, store_type, product_info, product_name)
-                    self.results.append(result)
+                    self.add_result_with_autosave(result)
                     
                     # Log result
                     if result['status'] == 'success':
