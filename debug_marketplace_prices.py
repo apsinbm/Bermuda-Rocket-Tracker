@@ -106,6 +106,27 @@ def debug_marketplace_prices():
         print(f"   Regular Price: $10.99 (crossed out)")
         print(f"   Should NOT find: $1.89 or anything related to 1.36 KG")
         
+        # Check page content for debugging
+        print("\n🔍 PAGE DEBUG INFO:")
+        try:
+            page_text = driver.page_source[:2000]  # First 2000 chars
+            print(f"   Page title: {driver.title}")
+            print(f"   Current URL: {driver.current_url}")
+            if "login" in page_text.lower():
+                print("   ⚠️  Login required")
+            if "hamilton" in page_text.lower():
+                print("   ✅ Hamilton store mention found")
+            if "out of stock" in page_text.lower():
+                print("   ⚠️  Out of stock mention found")
+            if "8.99" in page_text:
+                print("   ✅ 8.99 found in page")
+            if "10.99" in page_text:
+                print("   ✅ 10.99 found in page")
+            print(f"   Page contains 'price': {'price' in page_text.lower()}")
+            print(f"   Page length: {len(driver.page_source)} characters")
+        except Exception as e:
+            print(f"   Error checking page: {e}")
+        
         input("\nPress Enter to close browser...")
         
     except Exception as e:
