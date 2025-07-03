@@ -918,10 +918,10 @@ class HybridEcommerceMonitor:
             self.logger.info(f"Loaded {len(df)} products from {self.input_file}")
             
             start_time = time.time()
-            # FOCUS ON 3 RELIABLE STORES - Skip MarketPlace and Miles
-            site_columns = ['HH', 'Drop It', 'Pronto']
+            # FOCUS ON 2 MOST RELIABLE STORES - Drop It and Pronto only
+            site_columns = ['Drop It', 'Pronto']
             
-            self.logger.info("🎯 FOCUSING ON 3 STORES TONIGHT - HH, Drop It, and Pronto (Skipping MarketPlace and Miles)")
+            self.logger.info("🎯 FOCUSING ON 2 MOST RELIABLE STORES - Drop It and Pronto only")
             
             # No MarketPlace processing tonight
             
@@ -932,8 +932,8 @@ class HybridEcommerceMonitor:
                 
                 self.logger.info(f"\n📦 Processing Product {index + 1}: {product_name}")
                 
-                # Process reliable stores (skip MarketPlace and Miles)
-                for site_col in ['HH', 'Drop It', 'Pronto']:
+                # Process most reliable stores (Drop It and Pronto only)
+                for site_col in ['Drop It', 'Pronto']:
                     url = product_info.get(site_col)
                     
                     # Clean store type mapping
