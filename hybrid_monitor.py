@@ -119,20 +119,25 @@ class HybridEcommerceMonitor:
             width, height = random.choice(self.viewport_sizes)
             user_agent = random.choice(self.user_agents)
             
-            # Chrome options - avoid profile conflicts for now  
+            # Chrome options - BACKGROUND MODE (no window interruption)
             options = Options()
             
-            # Comment out profile for now to avoid conflicts
-            # options.add_argument("--user-data-dir=/Users/pato/Library/Application Support/Google/Chrome")
-            # options.add_argument("--profile-directory=Automation")
+            # HEADLESS MODE - Chrome runs invisibly in background
+            options.add_argument('--headless=new')  # New headless mode
+            options.add_argument('--no-sandbox')
+            options.add_argument('--disable-dev-shm-usage')
+            options.add_argument('--disable-gpu')
+            options.add_argument('--disable-extensions')
+            options.add_argument('--disable-web-security')
+            options.add_argument('--disable-features=VizDisplayCompositor')
+            
+            # If you want visible but non-intrusive Chrome instead:
+            # options.add_argument('--app=data:text/html,<html><body></body></html>')
+            # options.add_argument('--window-position=9999,9999')  # Move off-screen
+            # options.add_argument('--disable-popup-blocking')
             
             options.add_argument(f'--user-agent={user_agent}')
             options.add_argument(f'--window-size={width},{height}')
-            options.add_argument('--disable-web-security')
-            options.add_argument('--disable-features=VizDisplayCompositor')
-            options.add_argument('--disable-extensions')
-            options.add_argument('--no-sandbox')
-            options.add_argument('--disable-dev-shm-usage')
             options.add_experimental_option("excludeSwitches", ["enable-automation"])
             options.add_experimental_option('useAutomationExtension', False)
             
