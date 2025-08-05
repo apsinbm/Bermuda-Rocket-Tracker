@@ -211,22 +211,12 @@ interface TrajectoryInfo {
 }
 
 function getTrajectoryInfoLocal(padName: string, orbitType?: string, missionName?: string): TrajectoryInfo {
-  // Use the comprehensive trajectory database
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { getTrajectorySpec, validateTrajectory } = require('./trajectoryDatabase');
+  // This function should primarily be used when we don't have real trajectory data
+  // The main enhanced visibility function should use actual Flight Club/Space Launch Schedule data
   
-  const spec = getTrajectorySpec(missionName || '', orbitType || '', padName);
-  
-  // Validate the trajectory against orbital mechanics
-  if (!validateTrajectory(spec, padName)) {
-    console.warn(`Invalid trajectory for ${missionName}: inclination=${spec.inclination}°, azimuth=${spec.azimuth}°`);
-  }
-  
-  return {
-    visibility: spec.visibility,
-    direction: spec.direction,
-    bearing: spec.bearing
-  };
+  // Import the basic trajectory classification as fallback
+  const { getTrajectoryInfo } = require('./visibilityService');
+  return getTrajectoryInfo(padName, orbitType, missionName);
 }
 
 function getTrajectoryVisibility(padName: string, orbitType?: string): 'high' | 'medium' | 'low' | 'none' {

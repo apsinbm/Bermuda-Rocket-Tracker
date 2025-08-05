@@ -92,21 +92,73 @@ interface TrajectoryInfo {
 }
 
 export function getTrajectoryInfo(padName: string, orbitType?: string, missionName?: string): TrajectoryInfo {
-  // Import the comprehensive trajectory database
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { getTrajectorySpec, validateTrajectory } = require('./trajectoryDatabase');
+  const orbitLower = orbitType?.toLowerCase() || '';
+  const missionLower = missionName?.toLowerCase() || '';
   
-  const spec = getTrajectorySpec(missionName || '', orbitType || '', padName);
+  // Classify based on orbit type and typical trajectory patterns
+  // NOTE: This is a fallback for when we don't have real trajectory data
+  // The enhanced visibility service should use actual trajectory data from Flight Club/Space Launch Schedule
   
-  // Validate the trajectory against orbital mechanics
-  if (!validateTrajectory(spec, padName)) {
-    console.warn(`Invalid trajectory for ${missionName}: inclination=${spec.inclination}°, azimuth=${spec.azimuth}°`);
+  // GTO/GEO missions - rockets go southeast, so look west-southwest to see them coming
+  if (orbitLower.includes('gto') || 
+      orbitLower.includes('geostationary') ||
+      orbitLower.includes('geosynchronous') ||
+      orbitLower.includes('transfer orbit')) {
+    return {
+      visibility: 'medium',
+      direction: 'Southeast',
+      bearing: 247  // West-Southwest (to see Southeast-bound rockets coming)
+    };
   }
   
+  // ISS/LEO missions - rockets go northeast, so look southwest to see them coming
+  if (orbitLower.includes('iss') || 
+      orbitLower.includes('station') ||
+      orbitLower.includes('dragon') ||
+      orbitLower.includes('cygnus')) {
+    return {
+      visibility: 'high',
+      direction: 'Northeast',
+      bearing: 225  // Southwest (to see Northeast-bound rockets coming)
+    };
+  }
+  
+  // Starlink missions - CHECK REAL TRAJECTORY DATA FIRST
+  // This is just a fallback - the enhanced service should use actual Flight Club data
+  if (orbitLower.includes('starlink') || missionLower.includes('starlink')) {
+    return {
+      visibility: 'high', 
+      direction: 'Northeast', // This should come from real trajectory analysis
+      bearing: 225  // Southwest (to see Northeast-bound rockets coming)
+    };
+  }
+  
+  // General LEO missions - depends on actual trajectory, this is just a fallback
+  if (orbitLower.includes('leo') || 
+      orbitLower.includes('low earth orbit')) {
+    return {
+      visibility: 'high',
+      direction: 'Northeast', // Most LEO missions from Florida are Northeast
+      bearing: 225  // Southwest viewing direction
+    };
+  }
+  
+  // Polar/SSO missions - rockets go northeast, so look southwest to see them coming
+  if (orbitLower.includes('sso') ||
+      orbitLower.includes('sun-synchronous') ||
+      orbitLower.includes('polar')) {
+    return {
+      visibility: 'medium',
+      direction: 'Northeast', 
+      bearing: 225  // Southwest (to see Northeast-bound rockets coming)
+    };
+  }
+  
+  // Default for unknown missions - assume southeast trajectory, look west-southwest
   return {
-    visibility: spec.visibility,
-    direction: spec.direction,
-    bearing: spec.bearing
+    visibility: 'medium',
+    direction: 'Southeast',
+    bearing: 247  // West-Southwest (to see Southeast-bound rockets coming)
   };
 }
 
