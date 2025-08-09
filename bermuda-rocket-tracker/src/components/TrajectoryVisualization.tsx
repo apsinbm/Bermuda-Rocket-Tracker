@@ -5,7 +5,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { LaunchWithVisibility } from '../types';
-import Rocket3DTrajectoryMap from './Rocket3DTrajectoryMap';
 
 interface TrajectoryPoint {
   time: number; // seconds after liftoff
@@ -30,7 +29,6 @@ const TrajectoryVisualization: React.FC<TrajectoryVisualizationProps> = ({
   onClose,
   className = ''
 }) => {
-  const [activeTab, setActiveTab] = useState<'2d' | '3d'>('2d');
   const [trajectoryData, setTrajectoryData] = useState<TrajectoryPoint[]>([]);
   const [currentTime, setCurrentTime] = useState(0); // Now represents seconds, not array index
   const [isPlaying, setIsPlaying] = useState(false);
@@ -734,35 +732,8 @@ const TrajectoryVisualization: React.FC<TrajectoryVisualizationProps> = ({
         )}
       </div>
 
-      {/* Tab Navigation */}
-      <div className="px-4 pt-4">
-        <div className="flex space-x-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
-          <button
-            onClick={() => setActiveTab('2d')}
-            className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              activeTab === '2d'
-                ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
-                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-            }`}
-          >
-            📊 2D Chart View
-          </button>
-          <button
-            onClick={() => setActiveTab('3d')}
-            className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              activeTab === '3d'
-                ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
-                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-            }`}
-          >
-            🌍 3D Map View
-          </button>
-        </div>
-      </div>
 
-      {/* Tab Content */}
-      {activeTab === '2d' && (
-        <>
+      {/* Trajectory Content */}
           {/* Explanation */}
           <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border-b border-gray-200 dark:border-gray-700">
             <h4 className="text-sm font-semibold text-blue-800 dark:text-blue-200 mb-2">
@@ -787,22 +758,7 @@ const TrajectoryVisualization: React.FC<TrajectoryVisualizationProps> = ({
               className="border border-gray-300 dark:border-gray-600 rounded bg-gray-900"
             />
           </div>
-        </>
-      )}
-
-      {activeTab === '3d' && (
-        <div className="p-4">
-          <div className="bg-gray-900 rounded-lg overflow-hidden">
-            <Rocket3DTrajectoryMap 
-              launch={launch} 
-              onClose={() => setActiveTab('2d')} 
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Controls - Only show for 2D view */}
-      {activeTab === '2d' && (
+      {/* Controls */}
         <div className="p-4 border-t border-gray-200 dark:border-gray-700">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center space-x-4">
@@ -898,7 +854,6 @@ const TrajectoryVisualization: React.FC<TrajectoryVisualizationProps> = ({
           })()}
         </div>
         </div>
-      )}
     </div>
   );
 };

@@ -1,0 +1,11 @@
+# https://www.robotstxt.org/robotstxt.html
+User-agent: *
+Disallow: /debug.html
+Disallow: /static/js/
+Disallow: /static/css/
+
+# Allow all other pages
+Allow: /
+
+# Sitemap (will be generated after deployment)
+Sitemap: https://your-domain.com/sitemap.xml

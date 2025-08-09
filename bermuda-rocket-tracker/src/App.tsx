@@ -1,14 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { LaunchWithVisibility } from './types';
-import { calculateEnhancedVisibility } from './services/enhancedVisibilityService';
 import { convertToBermudaTime } from './utils/timeUtils';
 import { useLaunchData } from './hooks/useLaunchData';
 import LaunchCard from './components/LaunchCard';
+import NotificationSettings from './components/NotificationSettings';
+import AnalyticsDashboard from './components/AnalyticsDashboard';
+import WeatherDisplay from './components/WeatherDisplay';
+import { notificationService } from './services/notificationService';
+import { ExhaustPlumeVisibilityCalculator } from './services/ExhaustPlumeVisibilityCalculator';
+
 
 function App() {
   const [processedLaunches, setProcessedLaunches] = useState<LaunchWithVisibility[]>([]);
-  const [darkMode, setDarkMode] = useState(false);
+  const [darkMode, setDarkMode] = useState(true);
   const [showMonitoring, setShowMonitoring] = useState(false);
+  const [showNotificationSettings, setShowNotificationSettings] = useState(false);
+  const [showAnalytics, setShowAnalytics] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<string>('');
   
   // Use the dynamic launch data service
   const { 
@@ -21,48 +29,88 @@ function App() {
     forceUpdateLaunch 
   } = useLaunchData();
 
-  // Process launches with visibility calculations when raw launch data changes
+  // Debug: Track hook status
+  useEffect(() => {
+    setDebugInfo(prev => `Hook Status: Loading=${loading}, Error=${error}, Launches=${launches.length}, Last Updated=${lastUpdated ? new Date(lastUpdated).toLocaleTimeString() : 'never'}`);
+  }, [loading, error, launches.length, lastUpdated]);
+
+  // Process launches with proper visibility calculations
   useEffect(() => {
     const processLaunches = async () => {
+      console.log(`[App] Processing ${launches.length} launches with enhanced visibility calculations`);
+      
       if (launches.length === 0) {
+        console.log('[App] No launches from service, keeping empty state');
         setProcessedLaunches([]);
         return;
       }
 
-      const launchesWithVisibility: LaunchWithVisibility[] = [];
+      // Process each launch individually using simple visibility calculations
+      const processedLaunches: LaunchWithVisibility[] = [];
       
-      for (const launch of launches) {
-        try {
-          const visibilityData = await calculateEnhancedVisibility(launch);
-          launchesWithVisibility.push({
-            ...launch,
-            visibility: visibilityData,
-            bermudaTime: convertToBermudaTime(launch.net)
-          });
-        } catch (error) {
-          console.error(`Error calculating visibility for launch ${launch.id}:`, error);
-          // Fall back to basic visibility calculation
-          const { calculateVisibility } = await import('./services/visibilityService');
-          launchesWithVisibility.push({
-            ...launch,
-            visibility: calculateVisibility(launch),
-            bermudaTime: convertToBermudaTime(launch.net)
-          });
-        }
+      for (let i = 0; i < launches.length; i++) {
+        const launch = launches[i];
+        console.log(`[App] Processing launch ${i + 1}/${launches.length}: ${launch.name}`);
+        
+        // Use exhaust plume physics-based visibility calculation
+        console.log(`[App] Calculating exhaust plume visibility for ${launch.name}`);
+        const visibilityData = ExhaustPlumeVisibilityCalculator.calculatePlumeVisibility(launch);
+        
+        const processedLaunch: LaunchWithVisibility = {
+          ...launch,
+          visibility: {
+            likelihood: visibilityData.likelihood,
+            reason: visibilityData.reason,
+            bearing: visibilityData.bearing,
+            trajectoryDirection: visibilityData.trajectoryDirection,
+            estimatedTimeVisible: visibilityData.estimatedTimeVisible
+          },
+          bermudaTime: convertToBermudaTime(launch.net)
+        };
+        
+        processedLaunches.push(processedLaunch);
+        console.log(`[App] ✅ Visibility calculated for ${launch.name}: ${visibilityData.likelihood}`);
       }
       
-      // Filter out past launches and limit to 6
-      const now = new Date();
-      const upcomingOnly = launchesWithVisibility
-        .filter(launch => new Date(launch.net) > now)
-        .sort((a, b) => new Date(a.net).getTime() - new Date(b.net).getTime())
-        .slice(0, 6);
+      console.log(`[App] === PROCESSING COMPLETE ===`);
+      console.log(`[App] Total launches: ${launches.length}`);
+      console.log(`[App] Successfully processed: ${processedLaunches.length}`);
       
-      setProcessedLaunches(upcomingOnly);
+      // Log visibility distribution for debugging
+      const visibilityStats = {
+        high: processedLaunches.filter(l => l.visibility.likelihood === 'high').length,
+        medium: processedLaunches.filter(l => l.visibility.likelihood === 'medium').length,
+        low: processedLaunches.filter(l => l.visibility.likelihood === 'low').length,
+        none: processedLaunches.filter(l => l.visibility.likelihood === 'none').length
+      };
+      console.log(`[App] Visibility distribution: High=${visibilityStats.high}, Medium=${visibilityStats.medium}, Low=${visibilityStats.low}, None=${visibilityStats.none}`);
+      
+      // Log each launch result
+      processedLaunches.forEach((launch, index) => {
+        console.log(`[App] ${index + 1}. ${launch.name}: ${launch.visibility.likelihood} - ${launch.visibility.reason}`);
+        if (launch.visibility.bearing) {
+          console.log(`[App]    → Look towards: ${launch.visibility.bearing}°`);
+        }
+        if (launch.visibility.trajectoryDirection) {
+          console.log(`[App]    → Trajectory: ${launch.visibility.trajectoryDirection}`);
+        }
+      });
+      
+      // Show up to 6 launches
+      const launchesToShow = processedLaunches.slice(0, 6);
+      console.log(`[App] Setting ${launchesToShow.length} launches for display`);
+      setProcessedLaunches(launchesToShow);
     };
 
     processLaunches();
   }, [launches]);
+
+  // Schedule notifications when processed launches change
+  useEffect(() => {
+    if (processedLaunches.length > 0) {
+      notificationService.scheduleNotifications(processedLaunches);
+    }
+  }, [processedLaunches]);
 
   // Dark mode toggle
   useEffect(() => {
@@ -72,6 +120,15 @@ function App() {
       document.documentElement.classList.remove('dark');
     }
   }, [darkMode]);
+  
+  // Debug: Add window function to clear cache
+  useEffect(() => {
+    (window as any).clearLaunchCache = () => {
+      localStorage.removeItem('bermuda-rocket-launches-db');
+      localStorage.removeItem('bermuda-rocket-db-metadata');
+      console.log('Cache cleared! Refresh the page.');
+    };
+  }, []);
 
   if (loading) {
     return (
@@ -120,13 +177,31 @@ function App() {
             </div>
             
             <div className="flex items-center space-x-4">
+              {/* Notification settings */}
+              <button
+                onClick={() => setShowNotificationSettings(!showNotificationSettings)}
+                className="px-3 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm"
+                title="Notification settings"
+              >
+                🔔 Notifications
+              </button>
+              
+              {/* Analytics Dashboard */}
+              <button
+                onClick={() => setShowAnalytics(!showAnalytics)}
+                className="px-3 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm"
+                title="View launch analytics"
+              >
+                📊 Analytics
+              </button>
+              
               {/* Monitoring toggle */}
               <button
                 onClick={() => setShowMonitoring(!showMonitoring)}
                 className="px-3 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm"
                 title="Toggle refresh monitoring"
               >
-                📊 Monitor
+                🔍 Monitor
               </button>
               
               {/* Dark mode toggle */}
@@ -156,9 +231,14 @@ function App() {
           
           {lastUpdated && (
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-              Last updated: {new Date(lastUpdated).toLocaleTimeString()} • Dynamic refresh active 🔄
+              Last updated: {new Date(lastUpdated).toLocaleTimeString()}
             </p>
           )}
+
+          {/* Current Weather Widget */}
+          <div className="mt-4">
+            <WeatherDisplay showDetailed={false} />
+          </div>
           
           {/* Monitoring Dashboard */}
           {showMonitoring && refreshStatus.length > 0 && (
@@ -205,7 +285,30 @@ function App() {
                 })}
               </div>
               <div className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-                Refresh frequency automatically increases as launch approaches: 12h → 6h → 1h → 30m → 10m → 5m → 2m → 1m → 30s
+                Smart database refresh: 24h → 12h → 2h → 30m → 10m as launch approaches (no rate limiting)
+              </div>
+            </div>
+          )}
+          
+          {/* Analytics Dashboard Modal */}
+          {showAnalytics && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+              <div className="max-w-6xl w-full max-h-[90vh] overflow-y-auto">
+                <AnalyticsDashboard
+                  launches={processedLaunches}
+                  onClose={() => setShowAnalytics(false)}
+                />
+              </div>
+            </div>
+          )}
+          
+          {/* Notification Settings Modal */}
+          {showNotificationSettings && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+              <div className="max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                <NotificationSettings
+                  onClose={() => setShowNotificationSettings(false)}
+                />
               </div>
             </div>
           )}
@@ -223,6 +326,11 @@ function App() {
             <p className="text-gray-600 dark:text-gray-400">
               No upcoming launches from Florida launch pads are currently scheduled.
             </p>
+            {debugInfo && (
+              <div className="mt-4 p-4 bg-yellow-100 dark:bg-yellow-900 rounded-lg text-sm">
+                <strong>Debug:</strong> {debugInfo}
+              </div>
+            )}
           </div>
         ) : (
           <>
@@ -257,7 +365,9 @@ function App() {
             {/* Launch Cards */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {processedLaunches.map((launch) => (
-                <LaunchCard key={launch.id} launch={launch} />
+                <div key={launch.id} id={`launch-${launch.id}`}>
+                  <LaunchCard launch={launch} />
+                </div>
               ))}
             </div>
           </>

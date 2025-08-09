@@ -1,10 +1,12 @@
 import { LaunchWithVisibility } from '../types';
+import { getLaunchTimingInfo } from './launchTimingUtils';
 
 /**
  * Generate beginner-friendly rocket tracking explanation
+ * Uses consistent timing logic with visibility calculations
  */
 export function getTrackingExplanation(launch: LaunchWithVisibility): string {
-  const isNight = isNightTime(launch.net);
+  const timingInfo = getLaunchTimingInfo(launch.net);
   const direction = launch.visibility.trajectoryDirection;
   const likelihood = launch.visibility.likelihood;
 
@@ -14,12 +16,8 @@ export function getTrackingExplanation(launch: LaunchWithVisibility): string {
 
   let explanation = "";
 
-  // Time explanation
-  if (isNight) {
-    explanation += "🌙 Night launch - look for a bright moving star climbing slowly across the sky. ";
-  } else {
-    explanation += "☀️ Daytime launch - very difficult to spot against the bright blue sky. ";
-  }
+  // Time explanation using consistent timing logic
+  explanation += `${timingInfo.icon} ${timingInfo.description} - ${timingInfo.trackingAdvice} `;
 
   // Direction explanation - corrected for proper viewing from Bermuda
   if (direction === 'Northeast') {
@@ -35,20 +33,7 @@ export function getTrackingExplanation(launch: LaunchWithVisibility): string {
   }
 
   // Timing explanation
-  if (isNight) {
-    explanation += "Start watching about 6 minutes after liftoff - the rocket will appear as a bright dot moving steadily across the sky, potentially with a glowing exhaust plume behind it.";
-  } else {
-    explanation += "If visible at all, it may appear as a faint contrail or bright speck moving across the sky.";
-  }
+  explanation += "Start watching about 6 minutes after liftoff - timing and appearance will depend on lighting conditions.";
 
   return explanation;
-}
-
-/**
- * Check if launch is at night (simplified)
- */
-function isNightTime(launchTime: string): boolean {
-  const date = new Date(launchTime);
-  const hour = date.getHours();
-  return hour < 6 || hour > 20;
 }

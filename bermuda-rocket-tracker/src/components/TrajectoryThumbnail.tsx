@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 
 interface TrajectoryThumbnailProps {
   imageUrl: string;
-  trajectoryDirection?: 'Northeast' | 'East-Northeast' | 'East' | 'East-Southeast' | 'Southeast' | 'Unknown';
+  trajectoryDirection?: 'Northeast' | 'East-Northeast' | 'East' | 'East-Southeast' | 'Southeast' | 'North' | 'South' | 'Unknown';
   launchName: string;
 }
 
@@ -25,11 +25,13 @@ const TrajectoryThumbnail: React.FC<TrajectoryThumbnailProps> = ({
 
   const getDirectionColor = (direction?: string) => {
     switch (direction) {
+      case 'North': return 'text-purple-600 bg-purple-100';
       case 'Northeast': return 'text-green-600 bg-green-100';
       case 'East-Northeast': return 'text-emerald-600 bg-emerald-100';
       case 'East': return 'text-blue-600 bg-blue-100';
       case 'East-Southeast': return 'text-amber-600 bg-amber-100';
       case 'Southeast': return 'text-orange-600 bg-orange-100';
+      case 'South': return 'text-red-600 bg-red-100';
       default: return 'text-gray-600 bg-gray-100';
     }
   };
@@ -60,11 +62,13 @@ const TrajectoryThumbnail: React.FC<TrajectoryThumbnailProps> = ({
       
       {trajectoryDirection && trajectoryDirection !== 'Unknown' && !loading && !imageError && (
         <div className={`absolute -bottom-1 -right-1 px-1.5 py-0.5 text-xs font-medium rounded ${getDirectionColor(trajectoryDirection)}`}>
-          {trajectoryDirection === 'Northeast' ? 'NE' : 
+          {trajectoryDirection === 'North' ? 'N' :
+           trajectoryDirection === 'Northeast' ? 'NE' : 
            trajectoryDirection === 'East-Northeast' ? 'ENE' :
            trajectoryDirection === 'East' ? 'E' : 
            trajectoryDirection === 'East-Southeast' ? 'ESE' :
-           trajectoryDirection === 'Southeast' ? 'SE' : 'E'}
+           trajectoryDirection === 'Southeast' ? 'SE' :
+           trajectoryDirection === 'South' ? 'S' : 'E'}
         </div>
       )}
     </div>

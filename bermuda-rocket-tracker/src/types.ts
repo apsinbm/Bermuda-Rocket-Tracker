@@ -39,7 +39,9 @@ export interface VisibilityData {
   bearing?: number; // compass direction from Bermuda
   estimatedTimeVisible?: string;
   trajectoryImageUrl?: string;
-  trajectoryDirection?: 'Northeast' | 'East-Northeast' | 'East' | 'East-Southeast' | 'Southeast' | 'Unknown';
+  trajectoryDirection?: 'Northeast' | 'East-Northeast' | 'East' | 'East-Southeast' | 'Southeast' | 'North' | 'South' | 'Unknown';
+  score?: number; // visibility score (0-1)
+  factors?: string[]; // array of factors affecting visibility
 }
 
 export interface LaunchWithVisibility extends Launch {

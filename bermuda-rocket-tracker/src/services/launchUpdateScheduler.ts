@@ -208,13 +208,16 @@ export class LaunchUpdateManager {
    * Get time until next update for a launch
    */
   getTimeUntilNextUpdate(launchId: string, launchTime: string): number {
-    const lastUpdate = this.lastUpdate.get(launchId);
-    if (!lastUpdate) return 0;
-    
     const now = new Date().getTime();
     const launch = new Date(launchTime).getTime();
     const timeUntilLaunch = launch - now;
     const schedule = getRefreshInterval(timeUntilLaunch);
+    
+    const lastUpdate = this.lastUpdate.get(launchId);
+    if (!lastUpdate) {
+      // If never updated, use the schedule interval
+      return schedule.interval;
+    }
     
     const timeSinceLastUpdate = now - lastUpdate;
     return Math.max(0, schedule.interval - timeSinceLastUpdate);
@@ -237,12 +240,25 @@ export function getUrgencyLevel(timeUntilLaunch: number): 'low' | 'medium' | 'hi
  * Format refresh status for display
  */
 export function formatRefreshStatus(schedule: RefreshSchedule, nextUpdate: number): string {
-  const nextUpdateMinutes = Math.floor(nextUpdate / (1000 * 60));
-  const nextUpdateSeconds = Math.floor((nextUpdate % (1000 * 60)) / 1000);
+  const totalSeconds = Math.floor(nextUpdate / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
   
-  if (nextUpdateMinutes > 0) {
-    return `Next update in ${nextUpdateMinutes}m ${nextUpdateSeconds}s`;
+  if (hours > 0) {
+    if (minutes > 0) {
+      return `Next update in ${hours}h ${minutes}m`;
+    } else {
+      return `Next update in ${hours}h`;
+    }
+  } else if (minutes > 0) {
+    if (seconds > 0 && minutes < 5) {
+      // Only show seconds for short durations
+      return `Next update in ${minutes}m ${seconds}s`;
+    } else {
+      return `Next update in ${minutes}m`;
+    }
   } else {
-    return `Next update in ${nextUpdateSeconds}s`;
+    return `Next update in ${seconds}s`;
   }
 }
