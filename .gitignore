@@ -1,44 +1,130 @@
 # Python
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
+*.py[cod]
+*$py.class
 *.so
-.pytest_cache/
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
 *.egg-info/
+.installed.cfg
+*.egg
 
 # Virtual environments
 venv/
 env/
 ENV/
+.venv/
 
-# IDE
+# IDE files
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# OS
+# OS files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
 
-# Logs
+# Project specific logs
 *.log
 hybrid_monitor.log
 api_monitor.log
+scraper_*.log
+qa_monitor.log
 
-# Results and temporary files
-*Results.xlsx
-*results.xlsx
-test_*.xlsx
-single_product_test.xlsx
-~$*.xlsx
+# Database files
+*.db
+*.sqlite3
+production_scraper.db
 
-# Chrome driver cache
-.wdm/
-
-# Screenshots and OCR temp files
+# Screenshots and debug files
+*.png
+debug_*.html
+debug_*.json
 screenshots/
 temp_images/
-EOF < /dev/null
+mp_test_*.png
+debug_*.py
+
+# Temporary and result files
+temp/
+tmp/
+AutoSave_*
+*_temp.xlsx
+~$*.xlsx
+*Results.xlsx
+*results.xlsx
+*_results_*.xlsx
+*_results_*.csv
+*_results_*.json
+test_*.xlsx
+single_product_test.xlsx
+chunk_*.xlsx
+multi_product_test.xlsx
+
+# Large datasets and production results
+production_results/
+logs/
+Full_*_Results.xlsx
+Complete_*_Results.xlsx
+FINAL_*_Results.xlsx
+*_Comparison.xlsx
+background_scraper_results_*
+four_store_results_*
+
+# Browser and automation
+browsermob-proxy-*/
+chrome_profile/
+.chrome/
+.wdm/
+
+# OCR model cache
+.EasyOCR/
+
+# Mac specific
+.CFUserTextEncoding
+.Trash/
+.cache/
+.cups/
+.docker/
+.gemini/
+.local/
+.ndi/
+.newtek/
+.node_repl_history
+.npm-global/
+.npm/
+.npmrc
+.ollama/
+.python_history
+.viminfo
+.vnc/
+.windsurf/
+.zcompdump
+.zprofile
+.zprofile.pysave
+.zsh_history
+.zsh_sessions/
+.zshrc
+
+# Keep important files
+!README.md
+!requirements.txt
+!CLAUDE.md
+!setup.py
