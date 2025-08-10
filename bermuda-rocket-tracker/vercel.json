@@ -8,7 +8,7 @@
   "installCommand": "npm ci",
   "devCommand": "npm start",
   "public": false,
-  "regions": ["iad1", "lhr1", "hnd1"],
+  "regions": ["iad1"],
   "headers": [
     {
       "source": "/static/(.*)",
