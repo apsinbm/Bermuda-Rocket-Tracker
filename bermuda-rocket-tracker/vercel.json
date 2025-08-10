@@ -59,9 +59,6 @@
       "destination": "/index.html"
     }
   ],
-  "env": {
-    "REACT_APP_OPENWEATHER_API_KEY": "@openweather-api-key"
-  },
   "build": {
     "env": {
       "GENERATE_SOURCEMAP": "false",
