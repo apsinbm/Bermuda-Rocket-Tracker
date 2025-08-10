@@ -2,6 +2,8 @@
 
 A modern web application that tracks upcoming rocket launches from Florida (Cape Canaveral and Kennedy Space Center) and determines their visibility from Bermuda.
 
+🌐 **Live Application:** https://bermuda-rocket-tracker.vercel.app
+
 ## Features
 
 - **Real-time Launch Data**: Fetches upcoming launches from The Space Devs Launch Library API
