@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Bermuda Rocket Tracker</title>
+</head>
+<body>
+    <h1>Debug Bermuda Rocket Tracker</h1>
+    <div id="status">Loading...</div>
+    
+    <div style="margin: 20px 0; padding: 15px; background: #f0f0f0; border: 1px solid #ccc;">
+        <h3>Trajectory Cache Management</h3>
+        <button onclick="clearTrajectoryCache()">Clear Trajectory Cache</button>
+        <div id="cache-status"></div>
+    </div>
+    
+    <iframe src="http://localhost:3000" width="100%" height="800" id="app-frame"></iframe>
+    
+    <script>
+        const status = document.getElementById('status');
+        const frame = document.getElementById('app-frame');
+        
+        frame.onload = function() {
+            status.innerHTML = '✅ App loaded successfully in iframe';
+            console.log('App loaded successfully');
+        };
+        
+        frame.onerror = function() {
+            status.innerHTML = '❌ App failed to load';
+            console.error('App failed to load');
+        };
+        
+        // Clear trajectory cache function
+        function clearTrajectoryCache() {
+            const cacheStatus = document.getElementById('cache-status');
+            
+            try {
+                // Clear trajectory service cache
+                localStorage.removeItem('trajectory-cache');
+                
+                // Clear space launch schedule cache
+                localStorage.removeItem('space-launch-schedule-cache');
+                
+                // Clear any other trajectory-related cache items
+                const keys = Object.keys(localStorage);
+                let clearedCount = 0;
+                keys.forEach(key => {
+                    if (key.includes('trajectory') || key.includes('space-launch-schedule')) {
+                        localStorage.removeItem(key);
+                        clearedCount++;
+                    }
+                });
+                
+                cacheStatus.innerHTML = `✅ Trajectory cache cleared (${clearedCount} items). <strong>OTV-8 should now show Northeast direction.</strong>`;
+                cacheStatus.style.color = 'green';
+                
+                // Reload the iframe to apply changes
+                setTimeout(() => {
+                    frame.src = frame.src; // Force reload
+                }, 1000);
+                
+            } catch (error) {
+                cacheStatus.innerHTML = `❌ Error clearing cache: ${error.message}`;
+                cacheStatus.style.color = 'red';
+            }
+        }
+        
+        // Test direct fetch
+        fetch('http://localhost:3000')
+            .then(response => {
+                console.log('Fetch response:', response.status, response.statusText);
+                return response.text();
+            })
+            .then(html => {
+                console.log('HTML length:', html.length);
+                console.log('Contains React root:', html.includes('root'));
+            })
+            .catch(error => {
+                console.error('Fetch error:', error);
+            });
+    </script>
+</body>
+</html>

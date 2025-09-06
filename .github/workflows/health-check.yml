@@ -1,0 +1,82 @@
+name: Production Health Check
+
+on:
+  schedule:
+    # Run every 15 minutes
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check application health
+        run: |
+          # Test main application endpoint
+          response=$(curl -s -w "%{http_code}" https://bermuda-rocket-tracker.vercel.app)
+          http_code="${response: -3}"
+          
+          if [ "$http_code" != "200" ]; then
+            echo "❌ Health check failed with HTTP $http_code"
+            exit 1
+          fi
+          
+          # Test API integration
+          if ! echo "$response" | grep -q "Bermuda Rocket Tracker"; then
+            echo "❌ Application content validation failed"
+            exit 1
+          fi
+          
+          echo "✅ Health check passed"
+      
+      - name: Check API endpoints
+        run: |
+          # Test Space Devs API accessibility
+          api_response=$(curl -s -w "%{http_code}" "https://ll.thespacedevs.com/2.2.0/launch/upcoming/?limit=1")
+          api_code="${api_response: -3}"
+          
+          if [ "$api_code" != "200" ]; then
+            echo "⚠️ Upstream API health issue (HTTP $api_code)"
+            # Don't fail deployment for upstream issues
+          else
+            echo "✅ Upstream API accessible"
+          fi
+      
+      - name: Performance check
+        run: |
+          # Measure response time
+          response_time=$(curl -s -w "%{time_total}" -o /dev/null https://bermuda-rocket-tracker.vercel.app)
+          
+          # Fail if response time > 5 seconds
+          if (( $(echo "$response_time > 5.0" | bc -l) )); then
+            echo "❌ Performance degraded: ${response_time}s response time"
+            exit 1
+          fi
+          
+          echo "✅ Performance acceptable: ${response_time}s"
+      
+      - name: Bundle size check
+        run: |
+          # Download and check bundle size
+          wget -q https://bermuda-rocket-tracker.vercel.app/static/js/main.*.js -O main.js
+          bundle_size=$(wc -c < main.js)
+          bundle_mb=$((bundle_size / 1024 / 1024))
+          
+          # Fail if bundle > 2MB (currently ~97KB gzipped)
+          if [ $bundle_mb -gt 2 ]; then
+            echo "❌ Bundle size too large: ${bundle_mb}MB"
+            exit 1
+          fi
+          
+          echo "✅ Bundle size acceptable: ${bundle_mb}MB"
+
+  notify-on-failure:
+    runs-on: ubuntu-latest
+    needs: health-check
+    if: failure()
+    steps:
+      - name: Send failure notification
+        run: |
+          echo "🚨 Production health check failed!"
+          echo "Timestamp: $(date)"
+          echo "Consider rolling back to previous deployment"

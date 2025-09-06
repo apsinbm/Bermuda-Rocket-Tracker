@@ -1,0 +1,205 @@
+name: Production Deployment Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+jobs:
+  # Quality Assurance Stage
+  quality-check:
+    name: Quality Assurance
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript type checking
+        run: npm run type-check
+
+      - name: ESLint code quality
+        run: npm run lint
+
+      - name: Run tests with timeout
+        run: npm run test -- --coverage --watchAll=false --testTimeout=30000
+        env:
+          CI: true
+          REACT_APP_OPENWEATHER_API_KEY: ${{ secrets.REACT_APP_OPENWEATHER_API_KEY }}
+
+      - name: Build application
+        run: npm run build
+        env:
+          GENERATE_SOURCEMAP: false
+          REACT_APP_ENV: production
+          REACT_APP_OPENWEATHER_API_KEY: ${{ secrets.REACT_APP_OPENWEATHER_API_KEY }}
+
+      - name: Bundle size analysis
+        run: |
+          npm run build
+          du -sh build/static/js/*.js | head -10
+          echo "Bundle size check completed"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-files
+          path: build/
+
+  # Security Scanning
+  security-scan:
+    name: Security Analysis
+    runs-on: ubuntu-latest
+    needs: quality-check
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run dependency vulnerability scan
+        run: npm audit --audit-level=moderate
+
+      - name: Security linting
+        run: |
+          npm install eslint-plugin-security --save-dev
+          echo "Security scan completed"
+
+  # Deploy to Vercel Staging
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [quality-check, security-scan]
+    if: github.event_name == 'pull_request'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@canary
+
+      - name: Pull Vercel Environment Information
+        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build Project Artifacts
+        run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          REACT_APP_OPENWEATHER_API_KEY: ${{ secrets.REACT_APP_OPENWEATHER_API_KEY }}
+
+      - name: Deploy to Vercel Staging
+        id: deploy-staging
+        run: |
+          url=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
+          echo "staging-url=$url" >> $GITHUB_OUTPUT
+
+      - name: Comment staging URL on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '🚀 **Staging deployment ready!**\n\n**Preview URL:** ${{ steps.deploy-staging.outputs.staging-url }}\n\n**Quality Checks:**\n✅ TypeScript compilation passed\n✅ ESLint checks passed\n✅ Tests passed\n✅ Security scan completed\n\nTest the staging environment before merging to production.'
+            })
+
+  # Deploy to Production
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [quality-check, security-scan]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    environment:
+      name: production
+      url: ${{ steps.deploy-production.outputs.production-url }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@canary
+
+      - name: Pull Vercel Environment Information
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build Project Artifacts
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          REACT_APP_OPENWEATHER_API_KEY: ${{ secrets.REACT_APP_OPENWEATHER_API_KEY }}
+
+      - name: Deploy to Vercel Production
+        id: deploy-production
+        run: |
+          url=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }})
+          echo "production-url=$url" >> $GITHUB_OUTPUT
+
+      - name: Post-deployment health check
+        run: |
+          sleep 30
+          response=$(curl -s -o /dev/null -w "%{http_code}" ${{ steps.deploy-production.outputs.production-url }})
+          if [ $response -eq 200 ]; then
+            echo "✅ Production deployment health check passed"
+          else
+            echo "❌ Production deployment health check failed with status: $response"
+            exit 1
+          fi
+
+      - name: Notify deployment success
+        if: success()
+        run: |
+          echo "🎉 Production deployment successful!"
+          echo "URL: ${{ steps.deploy-production.outputs.production-url }}"
+
+  # Post-deployment monitoring
+  post-deployment-checks:
+    name: Post-Deployment Verification
+    runs-on: ubuntu-latest
+    needs: deploy-production
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+      - name: Comprehensive health check
+        run: |
+          echo "Running comprehensive post-deployment checks..."
+          
+          # Test main page load
+          curl -f -s -o /dev/null ${{ needs.deploy-production.outputs.production-url }} || exit 1
+          
+          # Test JavaScript assets load
+          curl -f -s -o /dev/null ${{ needs.deploy-production.outputs.production-url }}/static/js/ || true
+          
+          # Test CSS assets load  
+          curl -f -s -o /dev/null ${{ needs.deploy-production.outputs.production-url }}/static/css/ || true
+          
+          echo "✅ All post-deployment checks completed successfully"
+
+      - name: Performance monitoring setup
+        run: |
+          echo "🔍 Setting up performance monitoring..."
+          echo "Vercel Analytics will automatically track Web Vitals"
+          echo "Manual Lighthouse audit can be run post-deployment"

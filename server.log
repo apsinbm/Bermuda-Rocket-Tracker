@@ -1,0 +1,19 @@
+Server running on port 8080
+Try accessing:
+  http://localhost:8080
+  http://127.0.0.1:8080
+  http://172.20.10.2:8080 (Your local network IP)
+  http://0.0.0.0:8080
+Request: /
+Request: /manifest.json
+Request: /static/js/main.e2deb8ba.js
+Request: /static/css/main.aa620639.css
+Request: /
+Request: /manifest.json
+Request: /static/js/main.e2deb8ba.js
+Request: /static/css/main.aa620639.css
+Request: /
+Request: /manifest.json
+Request: /static/js/main.e2deb8ba.js
+Request: /static/css/main.aa620639.css
+Request: /favicon.ico

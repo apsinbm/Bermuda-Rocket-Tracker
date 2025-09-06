@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Console</title>
+    <style>
+        body { font-family: monospace; margin: 20px; }
+        button { margin: 5px; padding: 10px; }
+        #output { border: 1px solid #ccc; padding: 10px; height: 400px; overflow-y: scroll; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+    <h2>Bermuda Rocket Tracker Debug Console</h2>
+    
+    <button onclick="checkLocalStorage()">Check LocalStorage</button>
+    <button onclick="clearLocalStorage()">Clear LocalStorage</button>
+    <button onclick="testAPI()">Test API</button>
+    <button onclick="checkConsole()">Show Browser Logs</button>
+    
+    <div id="output"></div>
+
+    <script>
+        const output = document.getElementById('output');
+        
+        function log(message) {
+            output.textContent += new Date().toISOString() + ': ' + message + '\n';
+            output.scrollTop = output.scrollHeight;
+        }
+        
+        function checkLocalStorage() {
+            log('=== LocalStorage Check ===');
+            const db = localStorage.getItem('bermuda-rocket-launches-db');
+            const metadata = localStorage.getItem('bermuda-rocket-db-metadata');
+            
+            if (db) {
+                try {
+                    const parsed = JSON.parse(db);
+                    log('Database entries: ' + Object.keys(parsed).length);
+                    Object.keys(parsed).slice(0, 3).forEach(key => {
+                        log('Sample launch: ' + parsed[key].name + ' - ' + parsed[key].net);
+                    });
+                } catch (e) {
+                    log('Error parsing database: ' + e.message);
+                }
+            } else {
+                log('No database found in localStorage');
+            }
+            
+            if (metadata) {
+                log('Metadata: ' + metadata);
+            } else {
+                log('No metadata found');
+            }
+        }
+        
+        function clearLocalStorage() {
+            localStorage.removeItem('bermuda-rocket-launches-db');
+            localStorage.removeItem('bermuda-rocket-db-metadata');
+            log('LocalStorage cleared');
+        }
+        
+        async function testAPI() {
+            log('=== API Test ===');
+            try {
+                const response = await fetch('https://ll.thespacedevs.com/2.2.0/launch/upcoming/?limit=10&launch_service_provider__name=SpaceX&pad__location__name__icontains=florida');
+                const data = await response.json();
+                log('API returned ' + data.results.length + ' launches');
+                data.results.slice(0, 3).forEach(launch => {
+                    log('API Launch: ' + launch.name + ' - ' + launch.net + ' - ' + launch.pad.location.name);
+                });
+            } catch (error) {
+                log('API Error: ' + error.message);
+            }
+        }
+        
+        function checkConsole() {
+            log('=== Console Messages (check browser console for live updates) ===');
+            log('Look for messages starting with:');
+            log('[useLaunchData] - Hook activity');
+            log('[LaunchDataService] - Service activity');  
+            log('[App] - App component activity');
+            log('[VisibilityService] - Visibility calculations');
+        }
+        
+        // Capture console logs
+        const originalLog = console.log;
+        const originalError = console.error;
+        
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            if (args[0] && typeof args[0] === 'string' && 
+                (args[0].includes('[useLaunchData]') || 
+                 args[0].includes('[LaunchDataService]') || 
+                 args[0].includes('[App]'))) {
+                log('CONSOLE: ' + args.join(' '));
+            }
+        };
+        
+        console.error = function(...args) {
+            originalError.apply(console, args);
+            if (args[0] && typeof args[0] === 'string') {
+                log('ERROR: ' + args.join(' '));
+            }
+        };
+    </script>
+</body>
+</html>
