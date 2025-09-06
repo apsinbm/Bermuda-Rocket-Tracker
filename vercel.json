@@ -7,7 +7,7 @@
   "outputDirectory": "build",
   "installCommand": "npm install",
   "devCommand": "npm start",
-  "public": false,
+  "public": true,
   "regions": ["iad1"],
   "headers": [
     {
