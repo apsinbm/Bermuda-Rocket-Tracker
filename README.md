@@ -5,6 +5,7 @@ A modern web application that tracks upcoming rocket launches from Florida (Cape
 🌐 **Live Application:** https://bermuda-rocket-tracker.vercel.app
 
 *Last updated: September 6, 2025 - Enhanced trajectory visualization with purple launch pad*
+*Deployment: Fixed Vercel root directory configuration*
 
 ## Features
 
