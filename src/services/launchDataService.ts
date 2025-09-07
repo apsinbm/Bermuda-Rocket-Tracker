@@ -55,7 +55,6 @@ export class LaunchDataService {
       const allPast = cachedLaunches.every(launch => new Date(launch.net) < now);
       
       if (allPast) {
-        console.log('[LaunchDataService] All cached launches are in the past, clearing database');
         launchDatabase.clear();
       }
     }
@@ -87,43 +86,34 @@ export class LaunchDataService {
    * Get current launch data - database first approach
    */
   async getLaunches(): Promise<Launch[]> {
-    console.log('[LaunchDataService] getLaunches() called');
-    
     // Always return cached data if available and not stale
     if (this.cache.data.length > 0) {
       const now = new Date();
       const futureLaunches = this.cache.data.filter(launch => new Date(launch.net) > now);
-      console.log(`[LaunchDataService] Cache has ${this.cache.data.length} launches, ${futureLaunches.length} are future`);
       
       if (futureLaunches.length > 0) {
-        console.log('[LaunchDataService] Returning cached future launches:', futureLaunches.map(l => l.name));
         return futureLaunches;
       } else {
-        console.log('[LaunchDataService] All cached launches are in the past, clearing cache');
         this.cache.data = [];
       }
     }
     
     // If no cache, try database
     const cachedLaunches = launchDatabase.getAllLaunches();
-    console.log(`[LaunchDataService] Database has ${cachedLaunches.length} launches`);
     if (cachedLaunches.length > 0) {
       this.cache.data = cachedLaunches;
       this.cache.lastFetch = Date.now();
       const now = new Date();
       const futureLaunches = this.cache.data.filter(launch => new Date(launch.net) > now);
-      console.log(`[LaunchDataService] Returning ${futureLaunches.length} future launches from database`);
       return futureLaunches;
     }
     
     // Fetch from API when no valid cached data
-    console.log('[LaunchDataService] No cached data, fetching from API');
     await this.fetchLaunches();
     
     // Return only future launches
     const now = new Date();
     const futureLaunches = this.cache.data.filter(launch => new Date(launch.net) > now);
-    console.log(`[LaunchDataService] After API fetch: ${this.cache.data.length} total, ${futureLaunches.length} future`);
     
     return futureLaunches;
   }
@@ -148,18 +138,13 @@ export class LaunchDataService {
     this.isUpdating = true;
     
     try {
-      console.log('[LaunchDataService] Fetching Florida launch data...');
-      
       // Use our enhanced launch service that supports all Florida providers
       const launches = await fetchAllFloridaLaunches(30);
-      console.log(`[LaunchDataService] Retrieved ${launches.length} Florida launches from all providers`);
       
       // Enrich launches with FlightClub matching data
-      console.log('[LaunchDataService] Enriching launches with FlightClub data...');
       const enrichedLaunches = await launchMatchingService.enrichLaunchesWithFlightClub(launches);
       
       const matchedCount = enrichedLaunches.filter(l => l.hasFlightClubData).length;
-      console.log(`[LaunchDataService] Successfully matched ${matchedCount}/${launches.length} launches with FlightClub data`);
       
       // Store in database
       enrichedLaunches.forEach(launch => {
@@ -179,19 +164,15 @@ export class LaunchDataService {
       // Notify subscribers
       this.notifySubscribers();
       
-      console.log(`[LaunchDataService] ✅ Successfully updated with ${enrichedLaunches.length} launches`);
-      
     } catch (error) {
       console.error('[LaunchDataService] Error fetching launches:', error);
       
       // Try to use database data if available
       const dbLaunches = launchDatabase.getAllLaunches();
       if (dbLaunches.length > 0) {
-        console.log(`[LaunchDataService] Using cached database data: ${dbLaunches.length} launches`);
         this.cache.data = dbLaunches;
         this.notifySubscribers();
       } else {
-        console.log('[LaunchDataService] Using emergency mock data due to API failure');
         this.useEmergencyMockData();
       }
     } finally {
@@ -255,7 +236,6 @@ export class LaunchDataService {
     };
 
     this.notifySubscribers();
-    console.log('[LaunchDataService] Emergency mock data loaded');
   }
   
   /**
@@ -275,8 +255,6 @@ export class LaunchDataService {
    */
   private async updateLaunchData(launchId: string): Promise<void> {
     try {
-      console.log(`[LaunchDataService] Updating launch ${launchId}...`);
-      
       const response = await fetch(
         `https://ll.thespacedevs.com/2.2.0/launch/${launchId}/?format=json`
       );
@@ -324,12 +302,10 @@ export class LaunchDataService {
         
         // Notify subscribers
         this.notifySubscribers();
-        
-        console.log(`[LaunchDataService] Updated launch ${launchId}: ${updatedLaunch.name}`);
       }
       
     } catch (error) {
-      console.error(`[LaunchDataService] Failed to update launch ${launchId}:`, error);
+      console.error(`Failed to update launch ${launchId}:`, error);
     }
   }
   
@@ -349,17 +325,6 @@ export class LaunchDataService {
     const cachedLaunches = launchDatabase.getAllLaunches();
     
     if (cachedLaunches.length > 0) {
-      console.log(`[LaunchDataService] Loaded ${cachedLaunches.length} launches from database`);
-      // Debug: Check first launch coordinates
-      if (cachedLaunches[0]) {
-        console.log(`[LaunchDataService] First launch: ${cachedLaunches[0].name}`);
-        console.log(`[LaunchDataService] Pad coordinates:`, {
-          latitude: cachedLaunches[0].pad?.latitude,
-          longitude: cachedLaunches[0].pad?.longitude,
-          locationLat: cachedLaunches[0].pad?.location?.latitude,
-          locationLng: cachedLaunches[0].pad?.location?.longitude
-        });
-      }
       this.cache.data = cachedLaunches;
       this.cache.lastFetch = Date.now();
       this.notifySubscribers();
@@ -367,12 +332,10 @@ export class LaunchDataService {
       // Check if any launches need updating based on smart schedule
       const launchesNeedingUpdate = launchDatabase.getLaunchesNeedingUpdate();
       if (launchesNeedingUpdate.length > 0) {
-        console.log(`[LaunchDataService] ${launchesNeedingUpdate.length} launches need updating per schedule`);
         // Only update if user hasn't disabled auto-refresh
         await this.fetchLaunches();
       }
     } else {
-      console.log('[LaunchDataService] No cached data found, fetching from API');
       await this.fetchLaunches();
     }
   }
@@ -406,8 +369,6 @@ export class LaunchDataService {
    * Force immediate update of all launches
    */
   async forceRefresh(): Promise<void> {
-    console.log('[LaunchDataService] Force refresh requested - clearing all caches');
-    
     // Clear the database to ensure fresh data
     launchDatabase.clear();
     

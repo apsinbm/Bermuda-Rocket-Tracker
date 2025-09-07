@@ -7,7 +7,7 @@
  * - Specific time windows around sunrise and sunset provide optimal viewing
  */
 
-import { Launch, VisibilityData } from '../types';
+import { Launch, VisibilityData, USNOSolarData } from '../types';
 import { getAccurateSunTimes } from '../utils/accurateSunTimes';
 import { getBermudaTimeZone } from '../utils/bermudaTimeZone';
 import { getLaunchTimingInfo, LaunchTimingInfo } from '../utils/launchTimingUtils';
@@ -30,16 +30,13 @@ export class ExhaustPlumeVisibilityCalculator {
    * Calculate visibility using exhaust plume illumination physics
    * Now includes timing consistency validation
    */
-  static calculatePlumeVisibility(launch: Launch): VisibilityData & { plumeWindow: PlumeVisibilityWindow; timingInfo: LaunchTimingInfo } {
+  static async calculatePlumeVisibility(launch: Launch): Promise<VisibilityData & { plumeWindow: PlumeVisibilityWindow; timingInfo: LaunchTimingInfo }> {
     const launchTime = new Date(launch.net);
     const launchDate = new Date(launchTime.getFullYear(), launchTime.getMonth(), launchTime.getDate());
     
-    // Use accurate sun times with lookup table for known dates
-    const accurateTimes = getAccurateSunTimes(launchDate);
-    const sunTimes = {
-      sunrise: accurateTimes.sunrise,
-      sunset: accurateTimes.sunset
-    };
+    // Use government solar service for accurate sun times
+    const { GovernmentSolarService } = await import('./governmentSolarService');
+    const sunTimes = await GovernmentSolarService.getSolarDataForDate(launchDate);
     
     const plumeWindow = this.determinePlumeWindow(launchTime, sunTimes);
     const trajectoryMapping = getTrajectoryMapping(launch);
@@ -69,15 +66,17 @@ export class ExhaustPlumeVisibilityCalculator {
   /**
    * Determine visibility window based on exhaust plume illumination physics
    */
-  private static determinePlumeWindow(launchTime: Date, sunTimes: any): PlumeVisibilityWindow {
+  private static determinePlumeWindow(launchTime: Date, sunTimes: USNOSolarData): PlumeVisibilityWindow {
     // Convert UTC launch time to Bermuda local time for comparison
     const bermudaLaunchTime = new Date(launchTime.toLocaleString('en-US', { timeZone: 'Atlantic/Bermuda' }));
     const launchMinutes = bermudaLaunchTime.getHours() * 60 + bermudaLaunchTime.getMinutes();
     
     // Ensure both launch time and sun times are compared in the same timezone context
-    // Convert sun times to the same local representation for proper comparison
-    const sunsetLocalTime = new Date(sunTimes.sunset.toLocaleString('en-US', { timeZone: 'Atlantic/Bermuda' }));
-    const sunriseLocalTime = new Date(sunTimes.sunrise.toLocaleString('en-US', { timeZone: 'Atlantic/Bermuda' }));
+    // Parse sun times from strings and convert to local time
+    const sunsetTime = new Date(`${sunTimes.date} ${sunTimes.sunset}`);
+    const sunriseTime = new Date(`${sunTimes.date} ${sunTimes.sunrise}`);
+    const sunsetLocalTime = new Date(sunsetTime.toLocaleString('en-US', { timeZone: 'Atlantic/Bermuda' }));
+    const sunriseLocalTime = new Date(sunriseTime.toLocaleString('en-US', { timeZone: 'Atlantic/Bermuda' }));
     
     const sunsetMinutes = sunsetLocalTime.getHours() * 60 + sunsetLocalTime.getMinutes();
     const sunriseMinutes = sunriseLocalTime.getHours() * 60 + sunriseLocalTime.getMinutes();

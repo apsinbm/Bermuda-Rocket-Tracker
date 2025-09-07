@@ -33,7 +33,7 @@ const LaunchCard: React.FC<LaunchCardProps> = ({ launch, showDelayInfo = false }
   const [showDelayDetails, setShowDelayDetails] = useState(false);
   
   // Type guard to check if launch has delay tracking
-  const isDelayTracked = (launch: any): launch is LaunchWithDelayTracking => {
+  const isDelayTracked = (launch: LaunchWithVisibility | LaunchWithDelayTracking): launch is LaunchWithDelayTracking => {
     return 'delayHistory' in launch && 'scheduleStatus' in launch;
   };
   

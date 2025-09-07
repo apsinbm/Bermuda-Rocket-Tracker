@@ -60,7 +60,6 @@ function extractFlightClubId(html: string): string | undefined {
   const match = flightClubPattern.exec(html);
   
   if (match && match[1]) {
-    console.log(`[SpaceLaunchSchedule] Found FlightClub ID: ${match[1]}`);
     return match[1];
   }
   
@@ -69,7 +68,6 @@ function extractFlightClubId(html: string): string | undefined {
   const llIdMatch = llIdPattern.exec(html);
   
   if (llIdMatch && llIdMatch[1]) {
-    console.log(`[SpaceLaunchSchedule] Found Launch Library ID: ${llIdMatch[1]}`);
     return llIdMatch[1];
   }
   
@@ -120,12 +118,9 @@ function generateSpaceLaunchScheduleUrls(launch: Launch): string[] {
 export async function fetchSpaceLaunchScheduleData(launch: Launch): Promise<SpaceLaunchScheduleData> {
   const urls = generateSpaceLaunchScheduleUrls(launch);
   
-  console.log(`[SpaceLaunchSchedule] Fetching trajectory data for ${launch.mission.name}`);
-  console.log(`[SpaceLaunchSchedule] Trying ${urls.length} URL variations`);
   
   for (const url of urls) {
     try {
-      console.log(`[SpaceLaunchSchedule] Trying: ${url}`);
       
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000);
@@ -141,7 +136,6 @@ export async function fetchSpaceLaunchScheduleData(launch: Launch): Promise<Spac
       clearTimeout(timeoutId);
       
       if (!response.ok) {
-        console.log(`[SpaceLaunchSchedule] HTTP ${response.status} for ${url}`);
         continue;
       }
       
@@ -175,12 +169,9 @@ export async function fetchSpaceLaunchScheduleData(launch: Launch): Promise<Spac
               if (imgResponse.ok) {
                 trajectoryImageUrl = imageUrl;
                 trajectoryDirection = extractDirectionFromImageName(imageUrl);
-                console.log(`[SpaceLaunchSchedule] Found trajectory image: ${imageUrl}`);
-                console.log(`[SpaceLaunchSchedule] Extracted direction: ${trajectoryDirection || 'unknown'}`);
                 break;
               }
             } catch (err) {
-              console.log(`[SpaceLaunchSchedule] Failed to verify image: ${imageUrl}`);
             }
           }
         }
@@ -210,15 +201,12 @@ export async function fetchSpaceLaunchScheduleData(launch: Launch): Promise<Spac
       
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
-        console.log(`[SpaceLaunchSchedule] Request timeout for ${url}`);
       } else {
-        console.log(`[SpaceLaunchSchedule] Error fetching ${url}:`, error);
       }
     }
   }
   
   // No data found from any URL
-  console.log(`[SpaceLaunchSchedule] No trajectory data found for ${launch.mission.name}`);
   return {
     trajectoryAvailable: false,
     confidence: 'estimated',
@@ -261,7 +249,6 @@ export async function getCachedSpaceLaunchScheduleData(launch: Launch): Promise<
   const cached = slsDataCache.get(cacheKey);
   
   if (cached && Date.now() < cached.expires) {
-    console.log(`[SpaceLaunchSchedule] Using cached data for ${launch.mission.name}`);
     return cached.data;
   }
   
@@ -281,5 +268,4 @@ export async function getCachedSpaceLaunchScheduleData(launch: Launch): Promise<
  */
 export function clearSpaceLaunchScheduleCache(): void {
   slsDataCache.clear();
-  console.log('[SpaceLaunchSchedule] Cache cleared');
 }

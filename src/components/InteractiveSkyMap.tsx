@@ -79,7 +79,6 @@ const InteractiveSkyMap: React.FC<InteractiveSkyMapProps> = ({ launch, trajector
           });
         },
         (error) => {
-          console.log('Geolocation not available, using Bermuda coordinates');
           // Fallback to Bermuda coordinates
           setUserLocation({ lat: 32.3078, lng: -64.7505 });
         }
@@ -106,7 +105,6 @@ const InteractiveSkyMap: React.FC<InteractiveSkyMapProps> = ({ launch, trajector
             }
           })
           .catch((error: Error) => {
-            console.log('Device orientation permission denied');
           });
       } else {
         // Non-iOS devices

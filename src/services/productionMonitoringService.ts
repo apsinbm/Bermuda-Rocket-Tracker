@@ -29,6 +29,8 @@ interface ApiMetric {
   timestamp: number;
 }
 
+type StoredMetric = PerformanceMetric | ErrorReport | ApiMetric;
+
 class ProductionMonitoringService {
   private performanceObserver: PerformanceObserver | null = null;
   private errorReports: ErrorReport[] = [];
@@ -144,9 +146,6 @@ class ProductionMonitoringService {
 
   private recordPerformanceMetric(metric: PerformanceMetric): void {
     // In production, send to analytics service
-    if (config.logLevel === 'debug') {
-      console.log('[Monitoring] Performance:', metric);
-    }
     
     // Store for periodic reporting
     localStorage.setItem(
@@ -178,9 +177,6 @@ class ProductionMonitoringService {
   private recordApiMetric(metric: ApiMetric): void {
     this.apiMetrics.push(metric);
     
-    if (config.logLevel === 'debug') {
-      console.log('[Monitoring] API:', metric);
-    }
     
     // Store for periodic reporting
     localStorage.setItem(
@@ -192,7 +188,7 @@ class ProductionMonitoringService {
     );
   }
 
-  private getStoredMetrics(key: string): any[] {
+  private getStoredMetrics(key: string): StoredMetric[] {
     try {
       return JSON.parse(localStorage.getItem(key) || '[]');
     } catch {
@@ -219,13 +215,6 @@ class ProductionMonitoringService {
 
     // In a real production environment, you would send this to your analytics service
     // For now, we'll just log it
-    if (config.logLevel !== 'error') {
-      console.log('[Monitoring] Periodic report:', {
-        performanceMetrics: metrics.performance.length,
-        errorReports: metrics.errors.length,
-        apiMetrics: metrics.api.length,
-      });
-    }
 
     // Clear old metrics after reporting
     localStorage.removeItem('brt_performance_metrics');
@@ -243,9 +232,9 @@ class ProductionMonitoringService {
     uptime: number;
   } {
     return {
-      performance: this.getStoredMetrics('brt_performance_metrics'),
-      errors: this.getStoredMetrics('brt_error_reports'),
-      api: this.getStoredMetrics('brt_api_metrics'),
+      performance: this.getStoredMetrics('brt_performance_metrics') as PerformanceMetric[],
+      errors: this.getStoredMetrics('brt_error_reports') as ErrorReport[],
+      api: this.getStoredMetrics('brt_api_metrics') as ApiMetric[],
       uptime: performance.now(),
     };
   }

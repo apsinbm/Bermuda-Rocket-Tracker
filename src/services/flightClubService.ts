@@ -58,7 +58,6 @@ function computeBearing(lat1: number, lon1: number, lat2: number, lon2: number):
 export async function fetchFlightClubTelemetry(llId: string): Promise<TelemetryFrame[]> {
   try {
     const url = `https://flightclub.io/result/telemetry?llId=${llId}`;
-    console.log(`[FlightClub] Fetching telemetry for launch ${llId}: ${url}`);
     
     const response = await fetch(url, {
       headers: {
@@ -68,7 +67,6 @@ export async function fetchFlightClubTelemetry(llId: string): Promise<TelemetryF
     });
 
     if (!response.ok) {
-      console.log(`[FlightClub] Telemetry not available for launch ${llId}: ${response.status}`);
       return [];
     }
 
@@ -78,24 +76,20 @@ export async function fetchFlightClubTelemetry(llId: string): Promise<TelemetryF
     if (contentType.includes('application/json')) {
       const telemetry = await response.json();
       if (Array.isArray(telemetry) && telemetry.length > 0) {
-        console.log(`[FlightClub] Retrieved ${telemetry.length} telemetry frames for launch ${llId}`);
         return telemetry;
       }
     } else if (contentType.includes('text/html')) {
       // Flight Club API is returning HTML instead of JSON
-      console.log(`[FlightClub] API returned HTML instead of JSON for launch ${llId}`);
       
       // Try to extract telemetry data from HTML (if embedded)
       const html = await response.text();
       const telemetryFromHtml = extractTelemetryFromHtml(html);
       
       if (telemetryFromHtml.length > 0) {
-        console.log(`[FlightClub] Extracted ${telemetryFromHtml.length} telemetry frames from HTML`);
         return telemetryFromHtml;
       }
     }
 
-    console.log(`[FlightClub] No valid telemetry data found for launch ${llId}`);
     return [];
 
   } catch (error) {
@@ -133,7 +127,6 @@ function extractTelemetryFromHtml(html: string): TelemetryFrame[] {
             }
           }
         } catch (parseError) {
-          console.log('[FlightClub] Failed to parse embedded telemetry JSON:', parseError);
         }
       }
     }
@@ -149,13 +142,11 @@ function extractTelemetryFromHtml(html: string): TelemetryFrame[] {
           return telemetryData;
         }
       } catch (parseError) {
-        console.log('[FlightClub] Failed to parse window.telemetryData:', parseError);
       }
     }
     
     return [];
   } catch (error) {
-    console.log('[FlightClub] Error extracting telemetry from HTML:', error);
     return [];
   }
 }
@@ -254,7 +245,6 @@ export async function getCachedTelemetry(llId: string): Promise<TelemetryFrame[]
   // Check cache first
   const cached = telemetryCache.get(llId);
   if (cached && Date.now() < cached.expires) {
-    console.log(`Using cached telemetry for launch ${llId}`);
     return cached.data;
   }
   

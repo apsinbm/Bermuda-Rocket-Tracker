@@ -90,9 +90,6 @@ export class DelayImpactAnalyzer {
     scheduleChange: ScheduleChangeResult
   ): Promise<DelayImpactAnalysis> {
     
-    console.log(`[DelayImpact] Analyzing delay impact for ${launch.name}`);
-    console.log(`[DelayImpact] Old time: ${scheduleChange.oldLaunch.net}`);
-    console.log(`[DelayImpact] New time: ${launch.net}`);
     
     try {
       // Calculate visibility for both old and new times
@@ -111,7 +108,6 @@ export class DelayImpactAnalyzer {
       const userMessage = this.generateUserMessage(impact, severity, scheduleChange, oldVisibility, newVisibility);
       const shouldNotify = this.shouldNotifyUser(impact, severity, visibilityChange);
 
-      console.log(`[DelayImpact] ✅ Impact analysis complete: ${impact} (${severity})`);
       
       return {
         impact,
@@ -520,7 +516,6 @@ export class DelayImpactAnalyzer {
     description: string = 'Scenario comparison'
   ): Promise<DelayImpactAnalysis> {
     
-    console.log(`[DelayImpact] Comparing scenarios: ${description}`);
     
     // Create fake schedule change for comparison
     const fakeScheduleChange: ScheduleChangeResult = {
@@ -570,7 +565,6 @@ export class DelayImpactAnalyzer {
     scenarios: Array<{ delayedTime: string; description: string }>
   ): Promise<Array<DelayImpactAnalysis & { description: string }>> {
     
-    console.log(`[DelayImpact] Batch analyzing ${scenarios.length} scenarios for ${baseLaunch.name}`);
     
     const results = await Promise.all(
       scenarios.map(async scenario => {
@@ -579,7 +573,6 @@ export class DelayImpactAnalyzer {
       })
     );
     
-    console.log(`[DelayImpact] Batch analysis complete`);
     return results;
   }
 }

@@ -24,8 +24,8 @@ export interface FlightClubMission {
   vehicle: {
     description: string;
   };
-  sequences: any[];
-  landingZones: any[];
+  sequences?: unknown[];
+  landingZones?: unknown[];
 }
 
 export interface FlightClubTelemetryFrame {
@@ -73,7 +73,6 @@ class FlightClubApiService {
   private async makeRequest<T>(endpoint: string): Promise<T> {
     const url = `${FLIGHTCLUB_BASE_URL}${endpoint}`;
     
-    console.log(`[FlightClub API] Fetching: ${url}`);
     
     try {
       const response = await fetch(url, {
@@ -89,7 +88,6 @@ class FlightClubApiService {
       }
 
       const data = await response.json();
-      console.log(`[FlightClub API] Success: ${endpoint}`);
       return data as T;
       
     } catch (error) {
@@ -104,7 +102,6 @@ class FlightClubApiService {
   async getMissions(forceRefresh: boolean = false): Promise<FlightClubMission[]> {
     // Check cache first
     if (!forceRefresh && this.missionCache && Date.now() < this.missionCache.expiresAt) {
-      console.log('[FlightClub API] Using cached missions');
       return this.missionCache.data;
     }
 
@@ -118,13 +115,11 @@ class FlightClubApiService {
         expiresAt: Date.now() + MISSION_CACHE_DURATION
       };
 
-      console.log(`[FlightClub API] Cached ${missions.length} missions`);
       return missions;
       
     } catch (error) {
       // Return cached data if available on error
       if (this.missionCache) {
-        console.log('[FlightClub API] Using stale cache due to fetch error');
         return this.missionCache.data;
       }
       
@@ -140,7 +135,6 @@ class FlightClubApiService {
     // Check cache first
     const cached = this.trajectoryCache[missionId];
     if (!forceRefresh && cached && Date.now() < cached.expiresAt) {
-      console.log(`[FlightClub API] Using cached trajectory for mission ${missionId}`);
       return cached.data;
     }
 
@@ -156,7 +150,6 @@ class FlightClubApiService {
           expiresAt: Date.now() + TRAJECTORY_CACHE_DURATION
         };
 
-        console.log(`[FlightClub API] Cached trajectory for mission ${missionId}: ${trajectory.description}`);
         return trajectory;
       } else {
         console.warn(`[FlightClub API] Invalid trajectory data for mission ${missionId}`);
@@ -166,7 +159,6 @@ class FlightClubApiService {
     } catch (error) {
       // Return cached data if available on error
       if (cached) {
-        console.log(`[FlightClub API] Using stale trajectory cache for mission ${missionId} due to fetch error`);
         return cached.data;
       }
       
@@ -184,11 +176,9 @@ class FlightClubApiService {
       const match = missions.find(mission => mission.launchLibraryId === launchLibraryId);
       
       if (match) {
-        console.log(`[FlightClub API] Found exact match for LL2 ID ${launchLibraryId}: ${match.description}`);
         return match;
       }
       
-      console.log(`[FlightClub API] No exact match found for LL2 ID ${launchLibraryId}`);
       return null;
       
     } catch (error) {
@@ -230,7 +220,6 @@ class FlightClubApiService {
         return nameMatch && companyMatch && dateMatch;
       });
 
-      console.log(`[FlightClub API] Found ${matches.length} potential matches for "${missionName}"`);
       return matches;
       
     } catch (error) {
@@ -254,7 +243,6 @@ class FlightClubApiService {
         return missionDate >= thirtyDaysAgo && missionDate <= ninetyDaysFromNow;
       });
 
-      console.log(`[FlightClub API] Found ${recentMissions.length} recent missions`);
       return recentMissions;
       
     } catch (error) {
@@ -345,7 +333,6 @@ class FlightClubApiService {
   clearCache(): void {
     this.missionCache = null;
     this.trajectoryCache = {};
-    console.log('[FlightClub API] Cache cleared');
   }
 
   /**

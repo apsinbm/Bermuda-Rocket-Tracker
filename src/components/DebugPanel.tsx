@@ -70,7 +70,6 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ launches }) => {
                   }
                 });
                 
-                console.log('Trajectory cache cleared - OTV-8 should now show correct Northeast direction');
                 window.location.reload();
               }}
               className="block w-full px-2 py-1 bg-orange-500 text-white rounded text-xs"

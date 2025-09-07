@@ -68,8 +68,8 @@ export interface FlightClubMission {
   vehicle: {
     description: string;
   };
-  sequences: any[];
-  landingZones: any[];
+  sequences?: unknown[];
+  landingZones?: unknown[];
 }
 
 export interface FlightClubTelemetryFrame {
@@ -314,6 +314,14 @@ export interface LaunchSnapshot {
   checkCount: number;
 }
 
+export interface LaunchChanges {
+  netChanged: boolean;
+  windowChanged: boolean;
+  statusChanged: boolean;
+  delayMinutes: number;
+  windowShiftMinutes?: number;
+}
+
 export interface ScheduleChangeResult {
   hasChanged: boolean;
   changeType: 'delay' | 'advance' | 'scrub' | 'window_shift' | 'status_change' | 'no_change';
@@ -321,13 +329,7 @@ export interface ScheduleChangeResult {
   oldLaunch: LaunchSnapshot;
   newLaunch: Launch;
   delayEvent?: DelayEvent;
-  changes: {
-    netChanged: boolean;
-    windowChanged: boolean;
-    statusChanged: boolean;
-    delayMinutes: number;
-    windowShiftMinutes?: number;
-  };
+  changes: LaunchChanges;
   confidence: 'high' | 'medium' | 'low';
   recommendations: string[];
 }

@@ -22,7 +22,7 @@ jobs:
           fi
           
           # Test API integration
-          if ! echo "$response" | grep -q "Bermuda Rocket Tracker"; then
+          if ! echo "$response" | grep -q "Bermuda Rocket Launch Tracker"; then
             echo "❌ Application content validation failed"
             exit 1
           fi
@@ -58,7 +58,7 @@ jobs:
       - name: Bundle size check
         run: |
           # Download and check bundle size
-          wget -q https://bermuda-rocket-tracker.vercel.app/static/js/main.*.js -O main.js
+          curl -s https://bermuda-rocket-tracker.vercel.app | grep -o 'static/js/main\.[^"]*\.js' | head -1 | xargs -I {} curl -s "https://bermuda-rocket-tracker.vercel.app/{}" -o main.js
           bundle_size=$(wc -c < main.js)
           bundle_mb=$((bundle_size / 1024 / 1024))
           

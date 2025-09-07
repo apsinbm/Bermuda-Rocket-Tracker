@@ -95,7 +95,6 @@ interface TrajectoryInfo {
 }
 
 export function getTrajectoryInfo(padName: string, orbitType?: string, missionName?: string): TrajectoryInfo {
-  console.log(`[VisibilityService] DEPRECATED: getTrajectoryInfo called with basic parameters. Use getEnhancedTrajectoryInfo with Launch object for accurate results.`);
   
   // This function is kept for backward compatibility but should be replaced
   // with real trajectory data from the trajectory mapping service
@@ -130,7 +129,6 @@ export function getTrajectoryInfo(padName: string, orbitType?: string, missionNa
       bearing: viewingBearing
     };
   } catch (error) {
-    console.warn('[VisibilityService] Failed to use enhanced trajectory mapping, falling back to legacy logic:', error);
   }
   
   // Legacy fallback logic (to be removed when all callers are updated)
@@ -155,7 +153,6 @@ export function getTrajectoryInfo(padName: string, orbitType?: string, missionNa
  */
 export async function getEnhancedTrajectoryInfo(launch: Launch): Promise<TrajectoryInfo> {
   try {
-    console.log(`[VisibilityService] Getting enhanced trajectory info for ${launch.mission.name}`);
     
     // Try to get real trajectory data first
     const { getTrajectoryData } = await import('./trajectoryService');
@@ -163,7 +160,6 @@ export async function getEnhancedTrajectoryInfo(launch: Launch): Promise<Traject
     
     if (trajectoryData.realTelemetry && trajectoryData.trajectoryDirection) {
       // We have real Flight Club telemetry data!
-      console.log(`[VisibilityService] Using real telemetry data: ${trajectoryData.trajectoryDirection} trajectory`);
       
       const { getViewingBearingFromBermuda } = await import('./trajectoryMappingService');
       const validDirection = trajectoryData.trajectoryDirection === 'Unknown' ? 'Northeast' : trajectoryData.trajectoryDirection;
@@ -183,7 +179,6 @@ export async function getEnhancedTrajectoryInfo(launch: Launch): Promise<Traject
     
     if (trajectoryData.trajectoryDirection && trajectoryData.source !== 'none') {
       // We have trajectory direction from Space Launch Schedule or generated data
-      console.log(`[VisibilityService] Using trajectory data from ${trajectoryData.source}: ${trajectoryData.trajectoryDirection}`);
       
       const { getViewingBearingFromBermuda } = await import('./trajectoryMappingService');
       const validDirection = trajectoryData.trajectoryDirection === 'Unknown' ? 'Northeast' : trajectoryData.trajectoryDirection;
@@ -202,7 +197,6 @@ export async function getEnhancedTrajectoryInfo(launch: Launch): Promise<Traject
     }
     
     // Fall back to trajectory mapping service (orbital mechanics)
-    console.log(`[VisibilityService] No trajectory data available, using orbital mechanics calculation`);
     const { getTrajectoryMapping, getViewingBearingFromBermuda } = await import('./trajectoryMappingService');
     const trajectoryMapping = getTrajectoryMapping(launch);
     const viewingBearing = getViewingBearingFromBermuda(trajectoryMapping);
@@ -213,7 +207,6 @@ export async function getEnhancedTrajectoryInfo(launch: Launch): Promise<Traject
       'low': 'low' as const
     };
     
-    console.log(`[VisibilityService] Calculated ${trajectoryMapping.direction} trajectory using ${trajectoryMapping.source} (${trajectoryMapping.confidence} confidence)`);
     
     return {
       visibility: visibilityMap[trajectoryMapping.confidence] || 'medium',
@@ -236,7 +229,6 @@ function getTrajectoryVisibility(padName: string, orbitType?: string): 'high' | 
 }
 
 export async function calculateVisibility(launch: Launch): Promise<VisibilityData> {
-  console.log(`[VisibilityService] Calculating visibility for ${launch.mission.name}`);
   
   // Extract coordinates using helper function
   const coordinates = extractLaunchCoordinates(launch);
@@ -246,7 +238,6 @@ export async function calculateVisibility(launch: Launch): Promise<VisibilityDat
   
   // Validate coordinates before calculations
   if (!coordinates.available) {
-    console.log(`[VisibilityService] No coordinates for ${launch.name}, using enhanced trajectory data`);
     
     const isNight = isNightTime(launch.net, launch.net);
     
@@ -310,7 +301,6 @@ export async function calculateVisibility(launch: Launch): Promise<VisibilityDat
 
 // Legacy synchronous version for backward compatibility
 export function calculateVisibilitySync(launch: Launch): VisibilityData {
-  console.log(`[VisibilityService] Using legacy synchronous visibility calculation for ${launch.mission.name}`);
   
   // Extract coordinates using helper function
   const coordinates = extractLaunchCoordinates(launch);
@@ -320,7 +310,6 @@ export function calculateVisibilitySync(launch: Launch): VisibilityData {
   
   // Validate coordinates before calculations
   if (!coordinates.available) {
-    console.log(`[VisibilityService] No coordinates for ${launch.name}, using legacy trajectory data`);
     
     const isNight = isNightTime(launch.net, launch.net);
     

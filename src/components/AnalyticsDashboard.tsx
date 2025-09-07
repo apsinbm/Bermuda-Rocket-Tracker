@@ -41,8 +41,6 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ launches, onClo
       acc[likelihood] = (acc[likelihood] || 0) + 1;
       return acc;
     }, {} as { [key: string]: number });
-    console.log('[Analytics] Visibility likelihood breakdown:', likelihoodCounts);
-    console.log('[Analytics] Total launches:', launches.length);
 
     const visibilityDistribution = {
       high: launches.filter(l => l.visibility.likelihood === 'high').length,
@@ -53,8 +51,6 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ launches, onClo
     
     // Debug: Verify our calculations add up
     const totalCalculated = visibilityDistribution.high + visibilityDistribution.medium + visibilityDistribution.low + visibilityDistribution.none;
-    console.log('[Analytics] Visibility distribution:', visibilityDistribution);
-    console.log('[Analytics] Sum check:', totalCalculated, 'vs', launches.length);
     
     if (totalCalculated !== launches.length) {
       console.warn('[Analytics] MISMATCH: Visibility categories do not add up to total launches!');

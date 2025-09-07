@@ -29,7 +29,6 @@ const CACHE_DURATION = 60 * 60 * 1000; // 1 hour in milliseconds
 export async function fetchAllFloridaLaunches(limit: number = 30): Promise<Launch[]> {
   // Check cache first
   if (launchCache && Date.now() < launchCache.expiresAt) {
-    console.log('[LaunchService] Using cached Florida launch data');
     return launchCache.data;
   }
 
@@ -40,7 +39,6 @@ export async function fetchAllFloridaLaunches(limit: number = 30): Promise<Launc
       location__ids: '27,12' // Kennedy Space Center, Cape Canaveral AFS
     });
 
-    console.log(`[LaunchService] Fetching Florida launches from API...`);
     const response = await fetch(`${API_BASE}/launch/upcoming/?${params}`);
     
     if (!response.ok) {
@@ -48,7 +46,6 @@ export async function fetchAllFloridaLaunches(limit: number = 30): Promise<Launc
     }
     
     const data = await response.json();
-    console.log(`[LaunchService] Received ${data.results.length} total Florida launches`);
     
     // Filter for major launch providers and upcoming status
     const filteredLaunches = data.results.filter((launch: Launch) => {
@@ -102,10 +99,6 @@ export async function fetchAllFloridaLaunches(limit: number = 30): Promise<Launc
       return acc;
     }, {});
 
-    console.log(`[LaunchService] Cached ${sortedLaunches.length} upcoming Florida launches:`);
-    Object.entries(providerCounts).forEach(([provider, count]) => {
-      console.log(`[LaunchService]   - ${provider}: ${count} launches`);
-    });
 
     return sortedLaunches;
 
@@ -114,7 +107,6 @@ export async function fetchAllFloridaLaunches(limit: number = 30): Promise<Launc
     
     // Return cached data if available, even if expired
     if (launchCache) {
-      console.log('[LaunchService] Using expired cache due to fetch error');
       return launchCache.data;
     }
     

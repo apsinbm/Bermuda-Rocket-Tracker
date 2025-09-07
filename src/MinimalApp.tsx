@@ -1,7 +1,6 @@
 import React from 'react';
 
 export default function MinimalApp() {
-  console.log('MinimalApp is rendering');
   
   return React.createElement('div', {
     style: {

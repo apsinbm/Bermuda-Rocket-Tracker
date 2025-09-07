@@ -34,11 +34,9 @@ class LaunchMatchingService {
     // Check cache first
     const cacheKey = `${launch.id}-${Date.now() < Date.now() + MATCH_CACHE_DURATION}`;
     if (matchCache.has(launch.id)) {
-      console.log(`[LaunchMatching] Using cached match for ${launch.name}`);
       return matchCache.get(launch.id) || null;
     }
 
-    console.log(`[LaunchMatching] Finding match for launch: ${launch.name}`);
 
     try {
       // Strategy 1: Exact match by Launch Library ID (most reliable)
@@ -60,7 +58,6 @@ class LaunchMatchingService {
         }
       }
 
-      console.log(`[LaunchMatching] No suitable match found for ${launch.name}`);
       return null;
 
     } catch (error) {
@@ -76,7 +73,6 @@ class LaunchMatchingService {
     try {
       const mission = await flightClubApiService.findMissionByLaunchLibraryId(launch.id);
       if (mission) {
-        console.log(`[LaunchMatching] Exact match found: ${mission.description}`);
         return mission;
       }
     } catch (error) {
@@ -95,7 +91,6 @@ class LaunchMatchingService {
     // Extract mission name from full launch name (remove rocket info)
     const missionName = this.extractMissionName(launch.name);
     
-    console.log(`[LaunchMatching] Searching for: "${missionName}" by "${launchProvider}"`);
 
     try {
       const candidates = await flightClubApiService.searchMissionsByName(
@@ -104,7 +99,6 @@ class LaunchMatchingService {
         launch.net
       );
 
-      console.log(`[LaunchMatching] Found ${candidates.length} candidates for fuzzy matching`);
       return candidates;
 
     } catch (error) {
@@ -132,7 +126,6 @@ class LaunchMatchingService {
       const reasons = this.getMatchReasons(candidate, missionName, launchProvider, launchDate);
       const warnings = this.validateMatch(candidate, launch);
 
-      console.log(`[LaunchMatching] Candidate "${candidate.description}" scored ${score.toFixed(1)}%`);
 
       if (score > bestScore) {
         bestScore = score;
@@ -346,7 +339,6 @@ class LaunchMatchingService {
     launch: Launch,
     warnings?: string[]
   ): LaunchMatch {
-    console.log(`[LaunchMatching] Match created: ${launch.name} -> ${mission.description} (${confidence}, ${score.toFixed(1)}%)`);
 
     return {
       flightClubMission: mission,
@@ -361,7 +353,6 @@ class LaunchMatchingService {
    * Enrich launches with FlightClub data
    */
   async enrichLaunchesWithFlightClub(launches: Launch[]): Promise<LaunchWithFlightClub[]> {
-    console.log(`[LaunchMatching] Enriching ${launches.length} launches with FlightClub data`);
 
     const enrichedLaunches: LaunchWithFlightClub[] = [];
 
@@ -377,14 +368,10 @@ class LaunchMatchingService {
       enrichedLaunches.push(enrichedLaunch);
 
       if (match) {
-        console.log(`[LaunchMatching] ✅ ${launch.name} matched with confidence: ${match.confidence}`);
-      } else {
-        console.log(`[LaunchMatching] ⚠️ ${launch.name} - no FlightClub match found`);
       }
     }
 
     const matchCount = enrichedLaunches.filter(l => l.hasFlightClubData).length;
-    console.log(`[LaunchMatching] Successfully matched ${matchCount}/${launches.length} launches`);
 
     return enrichedLaunches;
   }
@@ -394,7 +381,6 @@ class LaunchMatchingService {
    */
   clearCache(): void {
     matchCache.clear();
-    console.log('[LaunchMatching] Match cache cleared');
   }
 
   /**
@@ -427,7 +413,6 @@ class LaunchMatchingService {
       };
 
       matchCache.set(launchId, match);
-      console.log(`[LaunchMatching] Manual match created: ${launchId} -> ${flightClubMissionId}`);
       
       return match;
 

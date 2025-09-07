@@ -33,7 +33,6 @@ export function useLaunchData() {
 
   // Update launch data handler
   const updateLaunches = useCallback((launches: Launch[]) => {
-    console.log(`[useLaunchData] updateLaunches called with ${launches.length} launches:`, launches.map(l => l.name));
     setState(prev => ({
       ...prev,
       launches,
@@ -69,9 +68,7 @@ export function useLaunchData() {
 
     const initializeData = async () => {
       try {
-        console.log('[useLaunchData] Calling launchDataService.getLaunches()...');
         const launches = await launchDataService.getLaunches();
-        console.log(`[useLaunchData] Received ${launches.length} launches:`, launches.map(l => l.name));
         updateLaunches(launches);
         
         // Update refresh status every second for UI

@@ -76,7 +76,6 @@ function calculateVisibilityRadius(altitudeMeters: number): number {
 
 /**
  * Process trajectory points and determine visibility from Bermuda
- * TODO: Will be used when we have real trajectory data from Flight Club or other sources
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function processTrajectoryPoints(points: Array<{time: number, lat: number, lng: number, alt: number}>): TrajectoryPoint[] {
@@ -166,7 +165,6 @@ async function fetchFlightClubTrajectory(launchLibraryId: string): Promise<Traje
     const telemetry = await getCachedTelemetry(launchLibraryId);
     
     if (telemetry.length === 0) {
-      console.log(`No Flight Club telemetry available for launch ${launchLibraryId}`);
       return null;
     }
     
@@ -174,7 +172,6 @@ async function fetchFlightClubTrajectory(launchLibraryId: string): Promise<Traje
     const visibility = analyzeVisibility(telemetry);
     
     if (!visibility.isVisible) {
-      console.log(`Launch ${launchLibraryId} not visible from Bermuda according to Flight Club data`);
       return {
         launchId: launchLibraryId,
         source: 'flightclub',
@@ -212,7 +209,6 @@ async function fetchFlightClubTrajectory(launchLibraryId: string): Promise<Traje
     // Determine trajectory direction
     const trajectoryDirection = determineTrajectoryDirection(points);
     
-    console.log(`Flight Club telemetry: ${points.length} points, visible ${visibility.firstVisible?.time}-${visibility.lastVisible?.time}s, closest ${visibility.closestApproach?.distance_km?.toFixed(1)}km`);
     
     return {
       launchId: launchLibraryId,
@@ -291,21 +287,16 @@ function generateSpaceLaunchScheduleUrls(launch: Launch): string[] {
  */
 async function fetchSpaceLaunchScheduleImage(launchLibraryId: string, launch?: Launch): Promise<string | null> {
   try {
-    console.log(`[SpaceLaunchSchedule] Searching for trajectory image for launch ${launchLibraryId}`);
-    
     // Generate comprehensive URL list
     const possibleUrls = launch ? generateSpaceLaunchScheduleUrls(launch) : [
       `https://www.spacelaunchschedule.com/launch/${launchLibraryId}/`,
       `https://www.spacelaunchschedule.com/launch/falcon-9-${launchLibraryId}/`
     ];
 
-    console.log(`[SpaceLaunchSchedule] Trying ${possibleUrls.length} URLs for "${launch?.mission.name || launchLibraryId}"`);
-
     // Try each URL with enhanced error handling and timeout
     for (let i = 0; i < possibleUrls.length; i++) {
       const url = possibleUrls[i];
       try {
-        console.log(`[SpaceLaunchSchedule] Trying URL ${i + 1}/${possibleUrls.length}: ${url}`);
         
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
@@ -322,7 +313,6 @@ async function fetchSpaceLaunchScheduleImage(launchLibraryId: string, launch?: L
 
         if (response.ok) {
           const html = await response.text();
-          console.log(`[SpaceLaunchSchedule] Successfully fetched HTML from ${url}, searching for images...`);
           
           // Enhanced image search patterns
           const imagePatterns = [
@@ -346,36 +336,28 @@ async function fetchSpaceLaunchScheduleImage(launchLibraryId: string, launch?: L
             while ((match = pattern.exec(html)) !== null) {
               if (match[1]) {
                 const imageUrl = match[1].startsWith('http') ? match[1] : `https://www.spacelaunchschedule.com${match[1]}`;
-                console.log(`[SpaceLaunchSchedule] Found potential trajectory image: ${imageUrl}`);
                 
                 // Verify image exists and is accessible
                 try {
                   const imageResponse = await fetch(imageUrl, { method: 'HEAD' });
                   if (imageResponse.ok) {
-                    console.log(`[SpaceLaunchSchedule] Verified trajectory image for ${launchLibraryId}: ${imageUrl}`);
                     return imageUrl;
                   }
                 } catch (imageError) {
-                  console.log(`[SpaceLaunchSchedule] Image verification failed for ${imageUrl}:`, imageError);
+                  // Image verification failed, continue searching
                 }
               }
             }
           }
           
-          console.log(`[SpaceLaunchSchedule] No trajectory images found in HTML from ${url}`);
         } else {
-          console.log(`[SpaceLaunchSchedule] HTTP ${response.status} for ${url}`);
+          // HTTP error, try next URL
         }
       } catch (error) {
-        if (error instanceof Error && error.name === 'AbortError') {
-          console.log(`[SpaceLaunchSchedule] Request timeout for ${url}`);
-        } else {
-          console.log(`[SpaceLaunchSchedule] Failed to fetch ${url}:`, error);
-        }
+        // Request failed, continue to next URL
       }
     }
 
-    console.log(`[SpaceLaunchSchedule] No trajectory image found for launch ${launchLibraryId} after trying ${possibleUrls.length} URLs`);
     return null;
   } catch (error) {
     console.error(`[SpaceLaunchSchedule] Error fetching trajectory data for ${launchLibraryId}:`, error);
@@ -389,14 +371,11 @@ async function fetchSpaceLaunchScheduleImage(launchLibraryId: string, launch?: L
 export async function getTrajectoryData(launch: Launch): Promise<TrajectoryData> {
   const launchId = launch.id;
   
-  console.log(`[TrajectoryService] Getting trajectory data for launch ${launchId}: ${launch.name}`);
-  
   // Check cache first with proximity-based expiration
   const cached = trajectoryCache.get(launchId);
   const cacheExpiry = getCacheExpiryForLaunch(launch.net);
   
   if (cached && Date.now() < cached.expires && cached.expires > cacheExpiry) {
-    console.log(`[TrajectoryService] Using cached trajectory data for ${launchId}`);
     return cached.data;
   }
 
@@ -410,14 +389,12 @@ export async function getTrajectoryData(launch: Launch): Promise<TrajectoryData>
   };
 
   // Step 1: Try Space Launch Schedule for trajectory data (most comprehensive)
-  console.log(`[TrajectoryService] Checking Space Launch Schedule for ${launchId}...`);
   try {
     const { getCachedSpaceLaunchScheduleData } = await import('./spaceLaunchScheduleService');
     const slsData = await getCachedSpaceLaunchScheduleData(launch);
     
     if (slsData.flightClubId) {
       // Step 2: Use Flight Club ID to fetch telemetry
-      console.log(`[TrajectoryService] Found FlightClub ID: ${slsData.flightClubId}, fetching telemetry...`);
       const flightClubData = await fetchFlightClubTrajectory(slsData.flightClubId);
       if (flightClubData) {
         trajectoryData = {
@@ -426,23 +403,19 @@ export async function getTrajectoryData(launch: Launch): Promise<TrajectoryData>
           flightClubId: slsData.flightClubId,
           lastUpdated: new Date()
         };
-        console.log(`[TrajectoryService] Got confirmed FlightClub telemetry: ${flightClubData.points.length} points`);
       }
     } else if (slsData.trajectoryImageUrl) {
       // Step 3: Analyze trajectory image with environment-safe approach
-      console.log(`[TrajectoryService] Found trajectory image: ${slsData.trajectoryImageUrl}`);
       try {
         // Environment-safe image analysis import with fallback
         const { isBrowser } = await import('../utils/environmentUtils');
         
         if (isBrowser()) {
-          console.log('[TrajectoryService] Browser environment detected, attempting full image analysis');
           const { analyzeTrajectoryImage, getCachedAnalysis, cacheAnalysis } = await import('./imageAnalysisService');
           
           let analysis = getCachedAnalysis(slsData.trajectoryImageUrl);
           
           if (!analysis) {
-            console.log(`Analyzing trajectory image: ${slsData.trajectoryImageUrl}`);
             analysis = await analyzeTrajectoryImage(slsData.trajectoryImageUrl, launch);
             
             if (analysis.success) {
@@ -478,14 +451,11 @@ export async function getTrajectoryData(launch: Launch): Promise<TrajectoryData>
               visibilityWindow: calculateVisibilityWindow(points)
             };
             
-            console.log(`[TrajectoryService] Browser-analyzed trajectory image: ${points.length} points, direction: ${trajectoryData.trajectoryDirection}`);
           }
         } else {
-          console.log('[TrajectoryService] Server environment detected, using filename-based trajectory analysis');
           // Server-safe filename analysis
           const direction = analyzeTrajectoryFromFilename(slsData.trajectoryImageUrl, launch.mission.name);
           if (direction && direction !== 'Unknown') {
-            console.log(`[TrajectoryService] Filename analysis determined: ${direction} trajectory`);
             const estimatedTrajectory = generateTrajectoryFromDirection(launch, direction);
             trajectoryData = {
               ...estimatedTrajectory,
@@ -500,7 +470,6 @@ export async function getTrajectoryData(launch: Launch): Promise<TrajectoryData>
       }
     } else if (slsData.trajectoryDirection) {
       // Step 4: Use trajectory direction from filename
-      console.log(`[TrajectoryService] Using trajectory direction from Space Launch Schedule: ${slsData.trajectoryDirection}`);
       const estimatedTrajectory = generateTrajectoryFromDirection(launch, slsData.trajectoryDirection);
       trajectoryData = {
         ...estimatedTrajectory,
@@ -509,12 +478,11 @@ export async function getTrajectoryData(launch: Launch): Promise<TrajectoryData>
       };
     }
   } catch (error) {
-    console.error(`[TrajectoryService] Error fetching Space Launch Schedule data:`, error);
+    console.error(`Error fetching Space Launch Schedule data:`, error);
   }
   
   // Step 5: Fallback to mission-based trajectory generation
   if (trajectoryData.points.length === 0) {
-    console.log(`[TrajectoryService] No online data available, generating trajectory from mission type for ${launch.mission.name}`);
     trajectoryData = generateRealisticTrajectory(launch);
     trajectoryData.confidence = 'estimated';
     trajectoryData.lastUpdated = new Date();
@@ -530,7 +498,6 @@ export async function getTrajectoryData(launch: Launch): Promise<TrajectoryData>
       launchName.includes('x-37b') || launchName.includes('otv')) {
     
     if (trajectoryData.trajectoryDirection !== 'Northeast') {
-      console.log(`[TrajectoryService] OVERRIDE: X-37B mission "${launch.mission.name}" trajectory direction corrected from ${trajectoryData.trajectoryDirection} to Northeast`);
       trajectoryData.trajectoryDirection = 'Northeast';
       trajectoryData.confidence = 'confirmed'; // High confidence override
     }
@@ -542,7 +509,6 @@ export async function getTrajectoryData(launch: Launch): Promise<TrajectoryData>
     expires: Date.now() + cacheExpiry
   });
 
-  console.log(`[TrajectoryService] Final trajectory: ${trajectoryData.source} source, ${trajectoryData.confidence} confidence, ${trajectoryData.points.length} points, direction: ${trajectoryData.trajectoryDirection}`);
   return trajectoryData;
 }
 
@@ -571,7 +537,6 @@ function getCacheExpiryForLaunch(launchTime: string): number {
  * Server-safe trajectory analysis from filename and URL patterns
  */
 function analyzeTrajectoryFromFilename(imageUrl: string, missionName: string): TrajectoryData['trajectoryDirection'] {
-  console.log(`[TrajectoryService] Analyzing trajectory from filename: ${imageUrl}`);
   
   const filename = imageUrl.split('/').pop()?.toLowerCase() || '';
   const urlPath = imageUrl.toLowerCase();
@@ -603,30 +568,23 @@ function analyzeTrajectoryFromFilename(imageUrl: string, missionName: string): T
   
   // Step 1: Check filename for explicit trajectory direction
   if (trajectoryPatterns.northeast.some(pattern => filename.includes(pattern) || urlPath.includes(pattern))) {
-    console.log(`[TrajectoryService] Filename indicates Northeast trajectory`);
     return 'Northeast';
   } else if (trajectoryPatterns.southeast.some(pattern => filename.includes(pattern) || urlPath.includes(pattern))) {
-    console.log(`[TrajectoryService] Filename indicates Southeast trajectory`);
     return 'Southeast';
   } else if (trajectoryPatterns.east.some(pattern => filename.includes(pattern) || urlPath.includes(pattern))) {
-    console.log(`[TrajectoryService] Filename indicates East trajectory`);
     return 'East';
   }
   
   // Step 2: Mission type-based trajectory prediction
   if (missionPatterns.starlink.some(pattern => mission.includes(pattern))) {
-    console.log(`[TrajectoryService] Starlink mission detected, predicting Northeast trajectory`);
     return 'Northeast'; // Most Starlink missions go northeast
   } else if (missionPatterns.iss.some(pattern => mission.includes(pattern))) {
-    console.log(`[TrajectoryService] ISS mission detected, predicting Northeast trajectory`);
     return 'Northeast'; // ISS missions go northeast (51.6° inclination)
   } else if (missionPatterns.gto.some(pattern => mission.includes(pattern))) {
-    console.log(`[TrajectoryService] GTO mission detected, predicting Southeast trajectory`);
     return 'Southeast'; // GTO missions typically go southeast
   }
   
   // Step 3: Default based on common patterns
-  console.log(`[TrajectoryService] Using default Northeast trajectory prediction`);
   return 'Northeast'; // Most launches from Florida go northeast
 }
 
@@ -732,8 +690,6 @@ function generateRealisticTrajectory(launch: Launch): TrajectoryData {
   }
   
   const visibilityWindow = calculateVisibilityWindow(points);
-  
-  console.log(`[TrajectoryService] Generated realistic ${trajectoryDirection} trajectory: ${points.filter(p => p.visible).length} visible points`);
   
   return {
     launchId: launch.id,

@@ -4,7 +4,6 @@
  */
 
 import { calculateVisibility } from '../visibilityService';
-import { calculateEnhancedVisibility } from '../enhancedVisibilityService';
 import { Launch } from '../../types';
 
 // Mock trajectory service for enhanced visibility tests
@@ -135,7 +134,7 @@ describe('Visibility Service Integration Tests', () => {
         }
       });
 
-      const visibility = await calculateEnhancedVisibility(launch);
+      const visibility = await calculateVisibility(launch);
 
       expect(visibility).toHaveProperty('likelihood');
       expect(visibility).toHaveProperty('score');
@@ -156,7 +155,7 @@ describe('Visibility Service Integration Tests', () => {
       );
 
       const launch = createTestLaunch();
-      const visibility = await calculateEnhancedVisibility(launch);
+      const visibility = await calculateVisibility(launch);
 
       // Should fall back to basic visibility calculation
       expect(visibility).toHaveProperty('likelihood');
@@ -173,7 +172,7 @@ describe('Visibility Service Integration Tests', () => {
         }
       });
 
-      const visibility = await calculateEnhancedVisibility(launch);
+      const visibility = await calculateVisibility(launch);
 
       // Enhanced visibility should include timing information
       expect(visibility.factors.some(factor => 
@@ -199,7 +198,7 @@ describe('Visibility Service Integration Tests', () => {
       });
 
       const basicVisibility = calculateVisibility(starlinkLaunch);
-      const enhancedVisibility = await calculateEnhancedVisibility(starlinkLaunch);
+      const enhancedVisibility = await calculateVisibility(starlinkLaunch);
 
       // LEO Starlink missions typically have low visibility from Bermuda
       expect(basicVisibility.likelihood).toBe('low');
@@ -224,7 +223,7 @@ describe('Visibility Service Integration Tests', () => {
         }
       });
 
-      const visibility = await calculateEnhancedVisibility(planetaryLaunch);
+      const visibility = await calculateVisibility(planetaryLaunch);
 
       // Interplanetary launches often have good visibility due to high energy trajectories
       expect(['medium', 'high']).toContain(visibility.likelihood);
@@ -410,7 +409,7 @@ describe('Visibility Service Integration Tests', () => {
       const startTime = Date.now();
       
       const visibilities = await Promise.all(
-        launches.map(launch => calculateEnhancedVisibility(launch))
+        launches.map(launch => calculateVisibility(launch))
       );
       
       const endTime = Date.now();
@@ -431,7 +430,7 @@ describe('Visibility Service Integration Tests', () => {
 
 // Custom matcher for better test readability
 expect.extend({
-  toBeOneOf(received: any, expected: any[]) {
+  toBeOneOf<T>(received: T, expected: T[]) {
     const pass = expected.includes(received);
     return {
       message: () => 

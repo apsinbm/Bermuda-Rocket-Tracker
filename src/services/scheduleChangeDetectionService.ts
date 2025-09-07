@@ -6,7 +6,7 @@
  * Provides detailed change analysis for visibility impact calculations.
  */
 
-import { Launch, LaunchWithDelayTracking, DelayEvent, ScheduleStatus } from '../types';
+import { Launch, LaunchWithDelayTracking, DelayEvent, ScheduleStatus, LaunchChanges } from '../types';
 import { calculateVisibility } from './visibilityService';
 import { formatLaunchTime } from '../utils/timeUtils';
 
@@ -61,13 +61,11 @@ export class ScheduleChangeDetectionService {
   static detectChanges(currentLaunches: Launch[]): ScheduleChangeResult[] {
     const results: ScheduleChangeResult[] = [];
     
-    console.log(`[ScheduleDetection] Analyzing ${currentLaunches.length} launches for changes`);
     
     for (const currentLaunch of currentLaunches) {
       const result = this.detectSingleLaunchChanges(currentLaunch);
       if (result.hasChanged) {
         results.push(result);
-        console.log(`[ScheduleDetection] 🔄 Change detected for ${currentLaunch.name}: ${result.changeType} (${result.severity})`);
       }
       
       // Update snapshot regardless of changes
@@ -88,7 +86,6 @@ export class ScheduleChangeDetectionService {
     
     // No previous data - this is a new launch
     if (!snapshot) {
-      console.log(`[ScheduleDetection] New launch detected: ${currentLaunch.name}`);
       return {
         hasChanged: false,
         changeType: 'no_change',
@@ -161,7 +158,7 @@ export class ScheduleChangeDetectionService {
    * Categorize the type and severity of change
    */
   private static categorizeChange(
-    changes: any, 
+    changes: LaunchChanges, 
     snapshot: LaunchSnapshot, 
     currentLaunch: Launch
   ): { changeType: ScheduleChangeResult['changeType']; severity: ScheduleChangeResult['severity'] } {
@@ -262,7 +259,7 @@ export class ScheduleChangeDetectionService {
   /**
    * Infer reason for delay based on change patterns
    */
-  private static inferDelayReason(changes: any, currentLaunch: Launch): string | undefined {
+  private static inferDelayReason(changes: LaunchChanges, currentLaunch: Launch): string | undefined {
     const delayMinutes = Math.abs(changes.delayMinutes);
     
     // Common delay patterns
@@ -283,7 +280,7 @@ export class ScheduleChangeDetectionService {
   private static generateRecommendations(
     changeType: ScheduleChangeResult['changeType'], 
     severity: ScheduleChangeResult['severity'],
-    changes: any,
+    changes: LaunchChanges,
     currentLaunch: Launch
   ): string[] {
     const recommendations: string[] = [];
@@ -328,7 +325,7 @@ export class ScheduleChangeDetectionService {
    * Assess confidence in change detection
    */
   private static assessConfidence(
-    changes: any, 
+    changes: LaunchChanges, 
     snapshot: LaunchSnapshot, 
     currentLaunch: Launch
   ): 'high' | 'medium' | 'low' {
@@ -455,9 +452,6 @@ export class ScheduleChangeDetectionService {
       }
     }
     
-    if (cleanedCount > 0) {
-      console.log(`[ScheduleDetection] Cleaned up ${cleanedCount} old snapshots`);
-    }
   }
 
   /**
@@ -507,6 +501,5 @@ export class ScheduleChangeDetectionService {
    */
   static clearSnapshots(): void {
     launchSnapshots.clear();
-    console.log('[ScheduleDetection] All snapshots cleared');
   }
 }

@@ -233,16 +233,8 @@ export class ProductionHealthService {
    */
   logHealthStatus(health: SystemHealth): void {
     if (process.env.NODE_ENV === 'production') {
-      console.log('Health Check Results:', {
-        overall: health.overall,
-        timestamp: new Date().toISOString(),
-        checks: health.checks.map(check => ({
-          service: check.service,
-          status: check.status,
-          responseTime: check.responseTime
-        })),
-        performance: health.performance
-      });
+      // Health check results available via getHealthReport()
+      // Production monitoring would send this data to external service
     }
   }
 

@@ -4,8 +4,6 @@
  */
 
 import { launchDataService } from '../launchDataService';
-import { optimizedLaunchDataService } from '../optimizedLaunchDataService';
-import { calculateEnhancedVisibility } from '../enhancedVisibilityService';
 import { calculateVisibility } from '../visibilityService';
 
 // Mock the API to return consistent test data
@@ -187,7 +185,7 @@ describe('Launch Data Service Integration Tests', () => {
       const launches = await launchDataService.getLaunches();
       const testLaunch = launches[0];
       
-      const enhancedVisibility = await calculateEnhancedVisibility(testLaunch);
+      const enhancedVisibility = await calculateVisibility(testLaunch);
       
       expect(enhancedVisibility).toHaveProperty('likelihood');
       expect(enhancedVisibility).toHaveProperty('score');
@@ -374,7 +372,7 @@ describe('End-to-End Integration Tests', () => {
     // 3. Calculate visibility for each launch
     const launchesWithVisibility = await Promise.all(
       launches.map(async (launch) => {
-        const visibility = await calculateEnhancedVisibility(launch);
+        const visibility = await calculateVisibility(launch);
         return { ...launch, visibility };
       })
     );

@@ -3,6 +3,9 @@
  * Provides robust error handling for network failures, API rate limits, and other issues
  */
 
+// Type for error inputs that can be passed to error handling functions
+export type ErrorInput = Error | string | unknown;
+
 export enum ErrorType {
   NETWORK_ERROR = 'NETWORK_ERROR',
   RATE_LIMIT = 'RATE_LIMIT',
@@ -19,7 +22,7 @@ export interface ErrorDetails {
   retryAfter?: number; // seconds
   retryable: boolean;
   timestamp: number;
-  context?: Record<string, any>;
+  context?: Record<string, unknown>;
 }
 
 export interface RetryConfig {
@@ -60,7 +63,7 @@ export class ErrorHandlingService {
   /**
    * Classify error based on various indicators
    */
-  classifyError(error: any, response?: Response): ErrorDetails {
+  classifyError(error: ErrorInput, response?: Response): ErrorDetails {
     const timestamp = Date.now();
     let errorDetails: ErrorDetails;
 
@@ -140,32 +143,32 @@ export class ErrorHandlingService {
         message: 'Network connection failed. Check your internet connection.',
         retryable: true,
         timestamp,
-        context: { originalError: error.message }
+        context: { originalError: (error as Error).message }
       };
-    } else if (error && (error.name === 'AbortError' || (error.message && error.message.includes('timeout')))) {
+    } else if (error && ((error as Error).name === 'AbortError' || ((error as Error).message && (error as Error).message.includes('timeout')))) {
       // Timeout errors
       errorDetails = {
         type: ErrorType.TIMEOUT,
         message: 'Request timed out. The server took too long to respond.',
         retryable: true,
         timestamp,
-        context: { originalError: error.message }
+        context: { originalError: (error as Error).message }
       };
-    } else if (error && error.message) {
+    } else if (error && (error as Error).message) {
       // Generic errors - assume they might be temporary unless proven otherwise
-      const isLikelyTemporary = error.message.toLowerCase().includes('temporary') ||
-                               error.message.toLowerCase().includes('connection') ||
-                               error.message.toLowerCase().includes('timeout') ||
-                               error.message.toLowerCase().includes('network');
+      const isLikelyTemporary = (error as Error).message.toLowerCase().includes('temporary') ||
+                               (error as Error).message.toLowerCase().includes('connection') ||
+                               (error as Error).message.toLowerCase().includes('timeout') ||
+                               (error as Error).message.toLowerCase().includes('network');
       
       errorDetails = {
         type: ErrorType.UNKNOWN_ERROR,
-        message: error.message,
+        message: (error as Error).message,
         retryable: isLikelyTemporary,
         timestamp,
         context: { 
-          name: error.name,
-          stack: error.stack,
+          name: (error as Error).name,
+          stack: (error as Error).stack,
           originalError: error.toString()
         }
       };
@@ -190,7 +193,7 @@ export class ErrorHandlingService {
   async withRetry<T>(
     operation: () => Promise<T>,
     config: Partial<RetryConfig> = {},
-    context?: Record<string, any>
+    context?: Record<string, unknown>
   ): Promise<T> {
     const retryConfig: RetryConfig = {
       maxRetries: 3,

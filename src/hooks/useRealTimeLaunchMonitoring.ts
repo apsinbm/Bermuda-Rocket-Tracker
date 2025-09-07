@@ -117,7 +117,6 @@ export function useRealTimeLaunchMonitoring(
   
   // Initialize services on mount
   useEffect(() => {
-    console.log('[RealTimeMonitoring] Initializing services');
     
     // Initialize notification service
     DelayNotificationService.initialize(config.notificationThresholds);
@@ -127,7 +126,6 @@ export function useRealTimeLaunchMonitoring(
     
     return () => {
       // Cleanup on unmount
-      console.log('[RealTimeMonitoring] Cleaning up services');
       DynamicPollingService.stopAllMonitoring();
     };
   }, []);
@@ -138,7 +136,6 @@ export function useRealTimeLaunchMonitoring(
     oldTime: string,
     newTime: string
   ) => {
-    console.log(`[RealTimeMonitoring] Schedule change detected: ${updatedLaunch.name}`);
     
     try {
       // Create schedule change result for impact analysis
@@ -229,7 +226,6 @@ export function useRealTimeLaunchMonitoring(
       // Update unread notification count
       setUnreadNotificationCount(prev => prev + notifications.length);
       
-      console.log(`[RealTimeMonitoring] ✅ Processed ${notifications.length} notifications for ${updatedLaunch.name}`);
       
     } catch (error) {
       console.error(`[RealTimeMonitoring] Error processing schedule change for ${updatedLaunch.name}:`, error);
@@ -239,11 +235,9 @@ export function useRealTimeLaunchMonitoring(
   // Start monitoring function
   const startMonitoring = useCallback((launches: LaunchWithDelayTracking[]) => {
     if (isPaused) {
-      console.log('[RealTimeMonitoring] Cannot start - monitoring is paused');
       return;
     }
     
-    console.log(`[RealTimeMonitoring] Starting monitoring for ${launches.length} launches`);
     
     setIsMonitoring(true);
     setTrackedLaunches(launches);
@@ -269,7 +263,6 @@ export function useRealTimeLaunchMonitoring(
   
   // Stop monitoring function
   const stopMonitoring = useCallback(() => {
-    console.log('[RealTimeMonitoring] Stopping all monitoring');
     
     DynamicPollingService.stopAllMonitoring();
     setIsMonitoring(false);
@@ -284,7 +277,6 @@ export function useRealTimeLaunchMonitoring(
   
   // Pause monitoring function
   const pauseMonitoring = useCallback(() => {
-    console.log('[RealTimeMonitoring] Pausing monitoring');
     
     DynamicPollingService.stopAllMonitoring();
     setIsPaused(true);
@@ -293,7 +285,6 @@ export function useRealTimeLaunchMonitoring(
   
   // Resume monitoring function
   const resumeMonitoring = useCallback(() => {
-    console.log('[RealTimeMonitoring] Resuming monitoring');
     
     setIsPaused(false);
     if (trackedLaunches.length > 0) {
@@ -315,17 +306,14 @@ export function useRealTimeLaunchMonitoring(
       config: updatedConfig
     }));
     
-    console.log('[RealTimeMonitoring] Configuration updated');
   }, [config]);
   
   // Force check for delays
   const forceCheckForDelays = useCallback(async () => {
     if (!isMonitoring) {
-      console.log('[RealTimeMonitoring] Not monitoring - cannot force check');
       return;
     }
     
-    console.log('[RealTimeMonitoring] Force checking for delays...');
     
     try {
       // Import launch service to get current data
@@ -335,7 +323,6 @@ export function useRealTimeLaunchMonitoring(
       // Detect changes
       const changes = ScheduleChangeDetectionService.detectChanges(currentLaunches);
       
-      console.log(`[RealTimeMonitoring] Found ${changes.length} schedule changes`);
       
       // Process each change
       for (const change of changes) {
@@ -372,7 +359,6 @@ export function useRealTimeLaunchMonitoring(
       return null;
     }
     
-    console.log(`[RealTimeMonitoring] Simulating ${delayMinutes} minute delay for ${launch.name}`);
     
     const originalTime = new Date(launch.net);
     const delayedTime = new Date(originalTime.getTime() + delayMinutes * 60 * 1000);

@@ -53,7 +53,6 @@ export class DynamicPollingService {
     launch: LaunchWithDelayTracking,
     onScheduleChange?: (launch: LaunchWithDelayTracking, oldTime: string, newTime: string) => void
   ): void {
-    console.log(`[DynamicPolling] Starting monitoring for ${launch.name}`);
     
     this.onScheduleChangeCallback = onScheduleChange;
     
@@ -76,7 +75,6 @@ export class DynamicPollingService {
    * Stop monitoring a specific launch
    */
   static stopMonitoring(launchId: string): void {
-    console.log(`[DynamicPolling] Stopping monitoring for launch ${launchId}`);
     
     const interval = activePollingIntervals.get(launchId);
     if (interval) {
@@ -91,7 +89,6 @@ export class DynamicPollingService {
    * Stop all active monitoring
    */
   static stopAllMonitoring(): void {
-    console.log(`[DynamicPolling] Stopping all monitoring (${activePollingIntervals.size} active)`);
     
     for (const [launchId] of activePollingIntervals) {
       this.stopMonitoring(launchId);
@@ -103,7 +100,6 @@ export class DynamicPollingService {
    */
   static updateConfig(newConfig: Partial<LaunchMonitoringConfig>): void {
     this.config = { ...this.config, ...newConfig };
-    console.log(`[DynamicPolling] Configuration updated:`, this.config);
   }
 
   /**
@@ -153,14 +149,12 @@ export class DynamicPollingService {
    */
   private static scheduleNextPoll(launch: LaunchWithDelayTracking): void {
     if (!this.config.enableRealTimePolling) {
-      console.log(`[DynamicPolling] Real-time polling disabled, skipping ${launch.name}`);
       return;
     }
 
     const interval = this.calculatePollingInterval(new Date(launch.net));
     const priorityLevel = this.calculatePriorityLevel(new Date(launch.net));
     
-    console.log(`[DynamicPolling] Next poll for ${launch.name} in ${interval/1000}s (${priorityLevel} priority)`);
     
     const timeout = setTimeout(async () => {
       await this.performPoll(launch);
@@ -177,7 +171,6 @@ export class DynamicPollingService {
     const stats = pollingStats.get(launch.id);
     
     try {
-      console.log(`[DynamicPolling] Polling ${launch.name} for schedule updates...`);
       
       // Import launch service to check for updates
       const { launchService } = await import('./launchService');
@@ -192,9 +185,6 @@ export class DynamicPollingService {
         
         // Check if schedule changed
         if (oldTime !== newTime) {
-          console.log(`[DynamicPolling] 🚨 Schedule change detected for ${launch.name}:`);
-          console.log(`[DynamicPolling]   Old: ${oldTime}`);
-          console.log(`[DynamicPolling]   New: ${newTime}`);
           
           // Update statistics
           if (stats) {
@@ -250,7 +240,6 @@ export class DynamicPollingService {
         launch.priorityLevel = this.calculatePriorityLevel(new Date(launch.net));
         
       } else {
-        console.warn(`[DynamicPolling] Launch ${launch.name} no longer found in API - stopping monitoring`);
         this.stopMonitoring(launch.id);
       }
       
@@ -259,7 +248,6 @@ export class DynamicPollingService {
       
       // Continue polling even on errors, but with exponential backoff
       const backoffInterval = Math.min(this.calculatePollingInterval(new Date(launch.net)) * 2, 300000); // Max 5 minutes
-      console.log(`[DynamicPolling] Retrying ${launch.name} in ${backoffInterval/1000}s (backoff)`);
       
       const timeout = setTimeout(async () => {
         await this.performPoll(launch);
@@ -328,14 +316,12 @@ export class DynamicPollingService {
    * Optimize polling based on historical data and performance
    */
   static optimizePolling(): void {
-    console.log(`[DynamicPolling] Optimizing polling for ${pollingStats.size} launches...`);
     
     for (const [launchId, stats] of pollingStats) {
       // If we've detected delays frequently, increase polling frequency slightly
       if (stats.delaysDetected > 0 && stats.totalPolls > 10) {
         const delayRate = stats.delaysDetected / stats.totalPolls;
         if (delayRate > 0.1) { // > 10% delay rate
-          console.log(`[DynamicPolling] High delay rate (${Math.round(delayRate*100)}%) for ${launchId} - increasing polling frequency`);
           // Reduce intervals by 25% for high-delay launches
           this.config.pollingIntervals.critical = Math.max(15000, this.config.pollingIntervals.critical * 0.75);
           this.config.pollingIntervals.high = Math.max(30000, this.config.pollingIntervals.high * 0.75);
@@ -344,7 +330,6 @@ export class DynamicPollingService {
       
       // If response times are high, slightly reduce polling frequency to avoid overwhelming API
       if (stats.avgResponseTime > 5000) { // > 5 second response time
-        console.log(`[DynamicPolling] High response time (${stats.avgResponseTime}ms) for ${launchId} - reducing polling frequency`);
         this.config.pollingIntervals.critical = Math.min(60000, this.config.pollingIntervals.critical * 1.25);
         this.config.pollingIntervals.high = Math.min(120000, this.config.pollingIntervals.high * 1.25);
       }
@@ -394,10 +379,8 @@ export class DynamicPollingService {
     }
     
     expiredLaunches.forEach(launchId => {
-      console.log(`[DynamicPolling] Cleaning up expired monitoring for launch ${launchId}`);
       this.stopMonitoring(launchId);
     });
     
-    console.log(`[DynamicPolling] Cleanup completed - removed ${expiredLaunches.length} expired monitors`);
   }
 }

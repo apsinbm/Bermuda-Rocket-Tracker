@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { LaunchWithVisibility } from '../types';
-import { getTrajectoryData } from '../services/trajectoryService';
+import { getTrajectoryData, TrajectoryData, TrajectoryPoint } from '../services/trajectoryService';
 
 
 interface TrajectoryVisualizationProps {
@@ -20,7 +20,7 @@ export default function TrajectoryVisualization({
   height = 600 
 }: TrajectoryVisualizationProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [trajectoryData, setTrajectoryData] = useState<any>(null);
+  const [trajectoryData, setTrajectoryData] = useState<TrajectoryData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showVisibilityOnly, setShowVisibilityOnly] = useState(false);
@@ -221,7 +221,7 @@ export default function TrajectoryVisualization({
       ctx.lineWidth = 3;
       ctx.beginPath();
 
-      trajectoryData.points.forEach((point: any, index: number) => {
+      trajectoryData.points.forEach((point: TrajectoryPoint, index: number) => {
         if (point.latitude && point.longitude) {
           const x = lonToX(point.longitude);
           const y = latToY(point.latitude);
@@ -237,7 +237,7 @@ export default function TrajectoryVisualization({
       ctx.stroke();
 
       // Draw visibility indicators along trajectory (more frequent and visible)
-      trajectoryData.points.forEach((point: any, index: number) => {
+      trajectoryData.points.forEach((point: TrajectoryPoint, index: number) => {
         if (point.latitude && point.longitude && index % 3 === 0) { // Show every 3rd point instead of every 10th
           // Skip non-visible points if showVisibilityOnly is enabled
           if (showVisibilityOnly && !point.visible) {

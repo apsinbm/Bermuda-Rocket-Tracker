@@ -33,7 +33,6 @@ export class SolarPositionCalculator {
     longitude: number = DEFAULT_LNG,
     elevation: number = DEFAULT_ELEVATION
   ): SolarPosition {
-    console.log(`[SolarPosition] Calculating solar position for ${dateTime.toISOString()} at ${latitude}, ${longitude}`);
 
     // Convert to Julian Day Number
     const jd = this.calculateJulianDay(dateTime);

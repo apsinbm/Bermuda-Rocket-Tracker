@@ -71,7 +71,7 @@ export class NotificationService {
    * Check if notifications are supported
    */
   isSupported(): boolean {
-    return 'Notification' in window && 'serviceWorker' in navigator;
+    return 'Notification' in window;
   }
 
   /**
@@ -184,7 +184,6 @@ export class NotificationService {
       }
     });
 
-    console.log(`Scheduled notifications for ${this.scheduledNotifications.size} launches`);
   }
 
   /**

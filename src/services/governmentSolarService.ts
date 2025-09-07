@@ -12,6 +12,12 @@
 
 import { USNOSolarData, SunriseSunsetApiData } from '../types';
 
+// USNO API response types
+interface USNOSunDataItem {
+  phen: 'R' | 'S' | 'BC' | 'EC' | 'BN' | 'EN' | 'BA' | 'EA' | 'U'; // Phenomenon code
+  time: string; // Time in HH:MM format
+}
+
 // Bermuda coordinates
 const BERMUDA_LAT = 32.3078;
 const BERMUDA_LNG = -64.7505;
@@ -37,11 +43,9 @@ export class GovernmentSolarService {
     // Check cache first
     const cached = solarDataCache.get(dateKey);
     if (cached && Date.now() < cached.expires) {
-      console.log(`[GovernmentSolar] Using cached data for ${dateKey}`);
       return cached.data;
     }
 
-    console.log(`[GovernmentSolar] Fetching fresh solar data for ${dateKey}`);
 
     // Try USNO first (most authoritative)
     try {
@@ -66,7 +70,6 @@ export class GovernmentSolarService {
     }
 
     // Final fallback - use existing astronomical calculations
-    console.log(`[GovernmentSolar] Using calculated fallback for ${dateKey}`);
     const calculatedData = this.generateCalculatedFallback(date);
     this.cacheSolarData(dateKey, calculatedData);
     return calculatedData;
@@ -83,7 +86,6 @@ export class GovernmentSolarService {
     
     const url = `${USNO_BASE_URL}?date=${dateStr}&coords=${coords}&tz=${tz}`;
     
-    console.log(`[GovernmentSolar] Calling USNO API: ${url}`);
     
     const response = await fetch(url, {
       method: 'GET',
@@ -100,7 +102,6 @@ export class GovernmentSolarService {
     }
 
     const data = await response.json();
-    console.log(`[GovernmentSolar] USNO response:`, data);
 
     // Parse USNO response format
     if (data.properties && data.properties.data) {
@@ -110,15 +111,15 @@ export class GovernmentSolarService {
       if (sunData) {
         return {
           date: dateStr,
-          sunrise: sunData.find((item: any) => item.phen === 'R')?.time || '',
-          sunset: sunData.find((item: any) => item.phen === 'S')?.time || '',
-          civil_twilight_begin: sunData.find((item: any) => item.phen === 'BC')?.time || '',
-          civil_twilight_end: sunData.find((item: any) => item.phen === 'EC')?.time || '',
-          nautical_twilight_begin: sunData.find((item: any) => item.phen === 'BN')?.time || '',
-          nautical_twilight_end: sunData.find((item: any) => item.phen === 'EN')?.time || '',
-          astronomical_twilight_begin: sunData.find((item: any) => item.phen === 'BA')?.time || '',
-          astronomical_twilight_end: sunData.find((item: any) => item.phen === 'EA')?.time || '',
-          solar_noon: sunData.find((item: any) => item.phen === 'U')?.time || '12:00',
+          sunrise: sunData.find((item: USNOSunDataItem) => item.phen === 'R')?.time || '',
+          sunset: sunData.find((item: USNOSunDataItem) => item.phen === 'S')?.time || '',
+          civil_twilight_begin: sunData.find((item: USNOSunDataItem) => item.phen === 'BC')?.time || '',
+          civil_twilight_end: sunData.find((item: USNOSunDataItem) => item.phen === 'EC')?.time || '',
+          nautical_twilight_begin: sunData.find((item: USNOSunDataItem) => item.phen === 'BN')?.time || '',
+          nautical_twilight_end: sunData.find((item: USNOSunDataItem) => item.phen === 'EN')?.time || '',
+          astronomical_twilight_begin: sunData.find((item: USNOSunDataItem) => item.phen === 'BA')?.time || '',
+          astronomical_twilight_end: sunData.find((item: USNOSunDataItem) => item.phen === 'EA')?.time || '',
+          solar_noon: sunData.find((item: USNOSunDataItem) => item.phen === 'U')?.time || '12:00',
           source: 'usno'
         };
       }
@@ -134,7 +135,6 @@ export class GovernmentSolarService {
     const dateStr = this.formatDateForAPI(date);
     const url = `${SUNRISE_SUNSET_BASE_URL}?lat=${BERMUDA_LAT}&lng=${BERMUDA_LNG}&date=${dateStr}&formatted=0`;
     
-    console.log(`[GovernmentSolar] Calling Sunrise-Sunset.org API: ${url}`);
     
     const response = await fetch(url, {
       method: 'GET',
@@ -149,7 +149,6 @@ export class GovernmentSolarService {
     }
 
     const data: SunriseSunsetApiData = await response.json();
-    console.log(`[GovernmentSolar] Sunrise-Sunset.org response:`, data);
 
     if (data.status === 'OK' && data.results) {
       const results = data.results;
@@ -272,7 +271,6 @@ export class GovernmentSolarService {
    */
   static clearCache(): void {
     solarDataCache.clear();
-    console.log('[GovernmentSolar] Cache cleared');
   }
 
   // Utility methods

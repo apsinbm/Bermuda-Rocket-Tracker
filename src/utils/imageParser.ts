@@ -1,8 +1,8 @@
 /**
  * Image parsing utilities for trajectory extraction
  * 
- * TODO: Implement OCR for trajectory line extraction from Space Launch Schedule images
- * This is a placeholder for future implementation that would:
+ * Future enhancement: OCR for trajectory line extraction from Space Launch Schedule images
+ * Placeholder for future implementation that would:
  * 1. Download trajectory images
  * 2. Use OCR libraries (like Tesseract.js) to extract trajectory lines
  * 3. Convert image coordinates to geographic coordinates
@@ -40,7 +40,6 @@ export interface TrajectoryImage {
  */
 export async function analyzeTrajectoryImage(imageUrl: string): Promise<TrajectoryImage | null> {
   try {
-    console.log(`TODO: Analyze trajectory image: ${imageUrl}`);
     
     // For now, just return null to indicate no trajectory data extracted
     // Future implementation would use:
@@ -80,7 +79,6 @@ export function imageToGeoCoordinates(
  */
 export function extractTrajectoryLine(imageData: ImageData): ImageTrajectoryPoint[] {
   // Placeholder implementation
-  console.log('TODO: Extract trajectory line from image data');
   
   // Future implementation would:
   // 1. Convert to grayscale
@@ -134,7 +132,6 @@ export async function downloadTrajectoryImage(url: string): Promise<{ image: HTM
  */
 export async function extractImageText(canvas: HTMLCanvasElement): Promise<string[]> {
   // Placeholder for Tesseract.js integration
-  console.log('TODO: Extract text from trajectory image using OCR');
   
   // Future implementation:
   // import Tesseract from 'tesseract.js';

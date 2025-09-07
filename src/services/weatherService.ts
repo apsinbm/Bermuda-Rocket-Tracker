@@ -68,13 +68,11 @@ export class WeatherService {
     if (this.OPENWEATHER_API_KEY) {
       try {
         weatherData = await this.fetchRealWeatherData();
-        console.log('[Weather] Using real weather data from OpenWeatherMap');
       } catch (error) {
         console.warn('[Weather] Failed to fetch real weather data, falling back to simulation:', error);
         weatherData = this.generateRealisticWeatherData();
       }
     } else {
-      console.log('[Weather] No API key configured, using simulated data');
       weatherData = this.generateRealisticWeatherData();
     }
     

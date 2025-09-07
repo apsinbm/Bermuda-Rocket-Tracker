@@ -79,7 +79,6 @@ function calculateLaunchAzimuthFromInclination(inclination: number, launchLatitu
   if (inclination >= 90) {
     // For retrograde SSO orbits, Cape Canaveral launches southeast over water
     // Typical azimuth range: 135-150°
-    console.log(`[TrajectoryMapping] Retrograde orbit detected (${inclination}°), using southeast trajectory`);
     return 140; // Southeast trajectory for SSO missions
   }
   
@@ -202,7 +201,6 @@ export function getTrajectoryMapping(launch: Launch): TrajectoryMapping {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const orbitName = launch.mission.orbit?.name?.toLowerCase() || '';
   
-  console.log(`[TrajectoryMapping] Analyzing trajectory for ${launch.mission.name}`);
   
   // Step 1: Check mission trajectory database first (highest confidence)
   const missionKey = missionName
@@ -213,7 +211,6 @@ export function getTrajectoryMapping(launch: Launch): TrajectoryMapping {
   // Special handling for X-37B OTV missions  
   if (missionName.includes('x-37b') || missionName.includes('x37b') || 
       missionName.includes('otv-') || missionName.includes('otv ')) {
-    console.log(`[TrajectoryMapping] X-37B OTV mission detected, using northeast trajectory`);
     return { 
       azimuth: 50, 
       direction: 'Northeast', 
@@ -235,7 +232,6 @@ export function getTrajectoryMapping(launch: Launch): TrajectoryMapping {
     
     // Check if it's an X-37B mission (USSF-36 is OTV-8)
     if (missionName.includes('ussf-36') || launch.name?.toLowerCase().includes('x-37b')) {
-      console.log(`[TrajectoryMapping] USSF-36/X-37B mission detected, using northeast trajectory`);
       return { 
         azimuth: 50, 
         direction: 'Northeast', 
@@ -251,13 +247,11 @@ export function getTrajectoryMapping(launch: Launch): TrajectoryMapping {
     }
     
     if (isGTO || isGEO) {
-      console.log(`[TrajectoryMapping] USSF ${isGTO ? 'GTO' : 'GEO'} mission detected, using southeast trajectory`);
       return { azimuth: 130, direction: 'Southeast', confidence: 'high', source: 'database' };
     }
   }
   
   if (MISSION_TRAJECTORY_DATABASE[missionKey]) {
-    console.log(`[TrajectoryMapping] Found database entry for ${missionKey}`);
     return MISSION_TRAJECTORY_DATABASE[missionKey];
   }
   
@@ -284,7 +278,6 @@ export function getTrajectoryMapping(launch: Launch): TrajectoryMapping {
   const calculatedAzimuth = calculateLaunchAzimuthFromInclination(orbitParams.inclination);
   const direction = azimuthToDirection(calculatedAzimuth);
   
-  console.log(`[TrajectoryMapping] Calculated azimuth ${calculatedAzimuth}° (${direction}) from inclination ${orbitParams.inclination}°`);
   
   return {
     azimuth: calculatedAzimuth,
@@ -326,7 +319,6 @@ export function getViewingBearingFromBermuda(trajectoryMapping: TrajectoryMappin
  */
 export function clearTrajectoryMappingCache(): void {
   // Currently no cache, but could be added for orbital calculations
-  console.log('[TrajectoryMapping] Cache cleared');
 }
 
 // Export for CommonJS compatibility

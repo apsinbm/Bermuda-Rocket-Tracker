@@ -6,7 +6,7 @@
 
 // Property-based testing with fast-check - skip for now due to ES module issues
 // const fc = require('fast-check');
-import { calculateEnhancedVisibility } from '../enhancedVisibilityService';
+import { calculateVisibility } from '../visibilityService';
 import { getTrajectoryData, clearTrajectoryCache } from '../trajectoryService';
 import { getTrajectoryMapping } from '../trajectoryMappingService';
 import { Launch, VisibilityData } from '../../types';
@@ -101,7 +101,7 @@ describe('trajectoryDataFlow integration', () => {
         confidence: 'high'
       });
 
-      const result = await calculateEnhancedVisibility(STARLINK_GROUP_10_30);
+      const result = await calculateVisibility(STARLINK_GROUP_10_30);
 
       expect(result.likelihood).toBeIn(['high', 'medium', 'low', 'none']); // System calculates based on actual conditions
       if (result.trajectoryDirection) {
@@ -136,7 +136,7 @@ describe('trajectoryDataFlow integration', () => {
         });
       }
 
-      const result = await calculateEnhancedVisibility(STARLINK_GROUP_10_30);
+      const result = await calculateVisibility(STARLINK_GROUP_10_30);
 
       expect(result.likelihood).toBeIn(['high', 'medium', 'low', 'none']); // Fallback behavior varies
       expect(result.trajectoryData).toBeDefined();
@@ -155,7 +155,7 @@ describe('trajectoryDataFlow integration', () => {
         new Error('Service unavailable')
       );
 
-      const result = await calculateEnhancedVisibility(STARLINK_GROUP_10_30);
+      const result = await calculateVisibility(STARLINK_GROUP_10_30);
 
       expect(result.likelihood).toBeIn(['high', 'medium', 'low', 'none']); // Fallback behavior varies
       expect(result.trajectoryData).toBeDefined();
@@ -180,7 +180,7 @@ describe('trajectoryDataFlow integration', () => {
       expect(trajectoryData.trajectoryDirection).toBe('Northeast');
       expect(trajectoryData.confidence).toBeIn(['confirmed', 'estimated', 'high']); // May vary based on override logic
 
-      const result = await calculateEnhancedVisibility(X37B_OTV8_LAUNCH);
+      const result = await calculateVisibility(X37B_OTV8_LAUNCH);
       if (result.trajectoryDirection) {
         expect(result.trajectoryDirection).toBe('Northeast');
       }
@@ -191,7 +191,7 @@ describe('trajectoryDataFlow integration', () => {
         new Error('Service down')
       );
 
-      const result = await calculateEnhancedVisibility(INVALID_COORDINATES_LAUNCH);
+      const result = await calculateVisibility(INVALID_COORDINATES_LAUNCH);
 
       expect(result.likelihood).toBeIn(['none', 'medium']); // Should handle gracefully
       expect(result.reason).toBeDefined();
@@ -249,7 +249,7 @@ describe('trajectoryDataFlow integration', () => {
         new Error('Network error')
       );
 
-      const result = await calculateEnhancedVisibility(STARLINK_GROUP_10_30);
+      const result = await calculateVisibility(STARLINK_GROUP_10_30);
 
       // Should not crash and provide reasonable fallback
       expect(result.likelihood).toBeIn(['high', 'medium', 'low', 'none']);
@@ -263,7 +263,7 @@ describe('trajectoryDataFlow integration', () => {
       global.window = undefined as any;
 
       try {
-        const result = await calculateEnhancedVisibility(STARLINK_GROUP_10_30);
+        const result = await calculateVisibility(STARLINK_GROUP_10_30);
         
         // Should still provide valid result
         expect(result.likelihood).toBeIn(['high', 'medium', 'low', 'none']);
@@ -373,7 +373,7 @@ describe('trajectoryDataFlow integration', () => {
         const launchTime = isNight ? '2024-01-15T03:00:00Z' : '2024-01-15T15:00:00Z';
         const testLaunch = { ...STARLINK_GROUP_10_30, net: launchTime };
 
-        const result = await calculateEnhancedVisibility(testLaunch);
+        const result = await calculateVisibility(testLaunch);
         
         // Verify result is in expected range based on distance and time
         expect(['high', 'medium', 'low', 'none']).toContain(result.likelihood);
@@ -425,7 +425,7 @@ describe('trajectoryDataFlow integration', () => {
           });
         }
 
-        const result = await calculateEnhancedVisibility(launch);
+        const result = await calculateVisibility(launch);
         
         // Should always return valid structure
         expect(result).toBeDefined();
@@ -443,7 +443,7 @@ describe('trajectoryDataFlow integration', () => {
         new Error('Service unavailable')
       );
 
-      const result = await calculateEnhancedVisibility(STARLINK_GROUP_10_30);
+      const result = await calculateVisibility(STARLINK_GROUP_10_30);
 
       // Should still provide reasonable visibility assessment
       expect(result.likelihood).toBeIn(['high', 'medium', 'low', 'none']); // System handles fallbacks gracefully

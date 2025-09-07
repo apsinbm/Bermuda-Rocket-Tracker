@@ -168,12 +168,10 @@ export class DelayScenarioTester {
    * Run all delay scenarios and validate results
    */
   static async runAllScenarios(): Promise<DelayTestResult[]> {
-    console.log(`[DelayTesting] Running ${DELAY_TEST_SCENARIOS.length} delay scenarios...`);
     
     const results: DelayTestResult[] = [];
     
     for (const scenario of DELAY_TEST_SCENARIOS) {
-      console.log(`[DelayTesting] Testing: ${scenario.name}`);
       const result = await this.runSingleScenario(scenario);
       results.push(result);
     }
@@ -456,31 +454,21 @@ export class DelayScenarioTester {
     
     const avgExecutionTime = results.reduce((sum, r) => sum + r.executionTime, 0) / totalTests;
     
-    console.log(`\n[DelayTesting] ═══ TEST SUMMARY ═══`);
-    console.log(`[DelayTesting] Total scenarios: ${totalTests}`);
-    console.log(`[DelayTesting] Passed: ${passedTests} (${(passedTests/totalTests*100).toFixed(1)}%)`);
-    console.log(`[DelayTesting] Failed: ${failedTests} (${(failedTests/totalTests*100).toFixed(1)}%)`);
-    console.log(`[DelayTesting] Average execution time: ${avgExecutionTime.toFixed(0)}ms`);
     
     // Log failed tests
     const failedResults = results.filter(r => !r.passed);
     if (failedResults.length > 0) {
-      console.log(`\n[DelayTesting] ❌ FAILED SCENARIOS:`);
       failedResults.forEach(result => {
-        console.log(`[DelayTesting]   • ${result.scenario.name}: ${result.issues.join(', ')}`);
       });
     }
     
     // Log performance insights
     const slowTests = results.filter(r => r.executionTime > 1000);
     if (slowTests.length > 0) {
-      console.log(`\n[DelayTesting] ⚠️ SLOW SCENARIOS (>1s):`);
       slowTests.forEach(result => {
-        console.log(`[DelayTesting]   • ${result.scenario.name}: ${result.executionTime}ms`);
       });
     }
     
-    console.log(`[DelayTesting] ═══ END SUMMARY ═══\n`);
   }
   
   /**
@@ -488,7 +476,6 @@ export class DelayScenarioTester {
    */
   static async runScenariosByCategory(category: DelayTestScenario['category']): Promise<DelayTestResult[]> {
     const scenarios = DELAY_TEST_SCENARIOS.filter(s => s.category === category);
-    console.log(`[DelayTesting] Running ${scenarios.length} scenarios in category: ${category}`);
     
     const results: DelayTestResult[] = [];
     for (const scenario of scenarios) {

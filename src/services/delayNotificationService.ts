@@ -53,7 +53,6 @@ export class DelayNotificationService {
     this.registerChannel('in-app', new InAppNotificationChannel());
     this.registerChannel('browser', new BrowserNotificationChannel());
     
-    console.log(`[DelayNotification] Service initialized with config:`, this.config);
   }
 
   /**
@@ -61,7 +60,6 @@ export class DelayNotificationService {
    */
   static registerChannel(name: string, channel: NotificationChannel): void {
     this.channels.set(name, channel);
-    console.log(`[DelayNotification] Registered channel: ${name}`);
   }
 
   /**
@@ -72,11 +70,9 @@ export class DelayNotificationService {
     impactAnalysis: DelayImpactAnalysis
   ): Promise<DelayNotification[]> {
     
-    console.log(`[DelayNotification] Processing delay impact for ${launch.name}: ${impactAnalysis.impact}`);
     
     // Don't notify if not needed
     if (!impactAnalysis.shouldNotify) {
-      console.log(`[DelayNotification] Impact analysis indicates no notification needed`);
       return [];
     }
     
@@ -96,7 +92,6 @@ export class DelayNotificationService {
       }
     }
     
-    console.log(`[DelayNotification] Sent ${sentNotifications.length} notifications for ${launch.name}`);
     return sentNotifications;
   }
 
@@ -265,7 +260,6 @@ export class DelayNotificationService {
         // Skip if within rate limit window (unless critical)
         if (minutesSinceLastSent < RATE_LIMITS.SAME_LAUNCH_MINUTES) {
           if (notification.priority !== 'high' || !RATE_LIMITS.CRITICAL_OVERRIDE) {
-            console.log(`[DelayNotification] Rate limited: ${historyKey} (${minutesSinceLastSent.toFixed(1)}min ago)`);
             continue;
           }
         }
@@ -274,7 +268,6 @@ export class DelayNotificationService {
       // Check global hourly rate limit
       if (this.checkGlobalRateLimit(now)) {
         if (notification.priority !== 'high' || !RATE_LIMITS.CRITICAL_OVERRIDE) {
-          console.log(`[DelayNotification] Global rate limit exceeded`);
           continue;
         }
       }
@@ -370,7 +363,6 @@ export class DelayNotificationService {
    */
   static clearNotificationQueue(): void {
     notificationQueue.length = 0;
-    console.log('[DelayNotification] Notification queue cleared');
   }
 
   /**
@@ -411,7 +403,6 @@ class InAppNotificationChannel implements NotificationChannel {
       notificationQueue.splice(0, 10); // Remove oldest 10
     }
     
-    console.log(`[InAppNotification] Queued: ${notification.type} for ${notification.launch.name}`);
     return true;
   }
   
@@ -453,7 +444,6 @@ class BrowserNotificationChannel implements NotificationChannel {
         setTimeout(() => browserNotification.close(), 10000);
       }
       
-      console.log(`[BrowserNotification] Sent: ${notification.type} for ${notification.launch.name}`);
       return true;
       
     } catch (error) {
@@ -474,8 +464,7 @@ class BrowserNotificationChannel implements NotificationChannel {
         try {
           this.permission = await Notification.requestPermission();
         } catch (error) {
-          console.log('[BrowserNotification] Permission request failed');
-          this.permission = 'denied';
+            this.permission = 'denied';
         }
       }
     }

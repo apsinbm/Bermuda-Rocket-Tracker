@@ -37,10 +37,8 @@ function App() {
   // Process launches with proper visibility calculations
   useEffect(() => {
     const processLaunches = async () => {
-      console.log(`[App] Processing ${launches.length} launches with enhanced visibility calculations`);
       
       if (launches.length === 0) {
-        console.log('[App] No launches from service, keeping empty state');
         setProcessedLaunches([]);
         return;
       }
@@ -50,11 +48,9 @@ function App() {
       
       for (let i = 0; i < launches.length; i++) {
         const launch = launches[i];
-        console.log(`[App] Processing launch ${i + 1}/${launches.length}: ${launch.name}`);
         
         // Use exhaust plume physics-based visibility calculation
-        console.log(`[App] Calculating exhaust plume visibility for ${launch.name}`);
-        const visibilityData = ExhaustPlumeVisibilityCalculator.calculatePlumeVisibility(launch);
+        const visibilityData = await ExhaustPlumeVisibilityCalculator.calculatePlumeVisibility(launch);
         
         const processedLaunch: LaunchWithVisibility = {
           ...launch,
@@ -69,12 +65,8 @@ function App() {
         };
         
         processedLaunches.push(processedLaunch);
-        console.log(`[App] ✅ Visibility calculated for ${launch.name}: ${visibilityData.likelihood}`);
       }
       
-      console.log(`[App] === PROCESSING COMPLETE ===`);
-      console.log(`[App] Total launches: ${launches.length}`);
-      console.log(`[App] Successfully processed: ${processedLaunches.length}`);
       
       // Log visibility distribution for debugging
       const visibilityStats = {
@@ -83,22 +75,17 @@ function App() {
         low: processedLaunches.filter(l => l.visibility.likelihood === 'low').length,
         none: processedLaunches.filter(l => l.visibility.likelihood === 'none').length
       };
-      console.log(`[App] Visibility distribution: High=${visibilityStats.high}, Medium=${visibilityStats.medium}, Low=${visibilityStats.low}, None=${visibilityStats.none}`);
       
       // Log each launch result
       processedLaunches.forEach((launch, index) => {
-        console.log(`[App] ${index + 1}. ${launch.name}: ${launch.visibility.likelihood} - ${launch.visibility.reason}`);
         if (launch.visibility.bearing) {
-          console.log(`[App]    → Look towards: ${launch.visibility.bearing}°`);
         }
         if (launch.visibility.trajectoryDirection) {
-          console.log(`[App]    → Trajectory: ${launch.visibility.trajectoryDirection}`);
         }
       });
       
       // Show up to 6 launches
       const launchesToShow = processedLaunches.slice(0, 6);
-      console.log(`[App] Setting ${launchesToShow.length} launches for display`);
       setProcessedLaunches(launchesToShow);
     };
 
@@ -126,7 +113,6 @@ function App() {
     (window as any).clearLaunchCache = () => {
       localStorage.removeItem('bermuda-rocket-launches-db');
       localStorage.removeItem('bermuda-rocket-db-metadata');
-      console.log('Cache cleared! Refresh the page.');
     };
   }, []);
 

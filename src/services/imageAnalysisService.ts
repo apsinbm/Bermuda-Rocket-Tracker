@@ -41,16 +41,13 @@ const RED_THRESHOLD = {
  */
 export async function analyzeTrajectoryImage(imageUrl: string, launch?: Launch): Promise<TrajectoryImageAnalysis> {
   try {
-    console.log(`[ImageAnalysis] Analyzing trajectory image: ${imageUrl}`);
     
     // Environment check - use different strategies based on capabilities
     if (!isBrowser()) {
-      console.log('[ImageAnalysis] Server environment detected, using filename-based analysis');
       return analyzeTrajectoryFromFilename(imageUrl, launch);
     }
     
     if (!hasCanvasSupport()) {
-      console.log('[ImageAnalysis] No Canvas support, using filename-based analysis');
       return analyzeTrajectoryFromFilename(imageUrl, launch);
     }
     
@@ -61,7 +58,6 @@ export async function analyzeTrajectoryImage(imageUrl: string, launch?: Launch):
         return browserAnalysis;
       }
     } catch (browserError) {
-      console.log('[ImageAnalysis] Browser analysis failed, falling back to filename analysis:', browserError);
     }
     
     // Fallback to filename-based analysis
@@ -85,7 +81,6 @@ export async function analyzeTrajectoryImage(imageUrl: string, launch?: Launch):
  * Works in any environment without browser dependencies
  */
 async function analyzeTrajectoryFromFilename(imageUrl: string, launch?: Launch): Promise<TrajectoryImageAnalysis> {
-  console.log('[ImageAnalysis] Using filename-based trajectory analysis');
   
   const filename = imageUrl.split('/').pop()?.toLowerCase() || '';
   const urlPath = imageUrl.toLowerCase();
@@ -131,7 +126,6 @@ async function analyzeTrajectoryFromFilename(imageUrl: string, launch?: Launch):
   
   // Step 2: If we have launch data, use trajectory mapping service
   if (launch && trajectoryDirection === 'Unknown') {
-    console.log('[ImageAnalysis] Using trajectory mapping service for accurate direction');
     const trajectoryMapping = getTrajectoryMapping(launch);
     trajectoryDirection = trajectoryMapping.direction;
     analysisMethod = 'trajectory-mapping';
@@ -144,20 +138,15 @@ async function analyzeTrajectoryFromFilename(imageUrl: string, launch?: Launch):
     
     if (missionPatterns.starlink.some(pattern => missionName.includes(pattern) || launchName.includes(pattern))) {
       trajectoryDirection = 'Northeast'; // Most Starlink missions
-      console.log('[ImageAnalysis] Starlink mission detected, using Northeast trajectory');
     } else if (missionPatterns.x37b.some(pattern => missionName.includes(pattern) || launchName.includes(pattern))) {
       trajectoryDirection = 'Northeast'; // X-37B missions typically northeast
-      console.log('[ImageAnalysis] X-37B mission detected, using Northeast trajectory');
     } else if (missionPatterns.iss.some(pattern => missionName.includes(pattern) || launchName.includes(pattern))) {
       trajectoryDirection = 'Northeast'; // ISS missions
-      console.log('[ImageAnalysis] ISS mission detected, using Northeast trajectory');
     } else if (missionPatterns.gto.some(pattern => missionName.includes(pattern) || launchName.includes(pattern))) {
       trajectoryDirection = 'Southeast'; // GTO missions typically go southeast
-      console.log('[ImageAnalysis] GTO mission detected, using Southeast trajectory');
     } else {
       trajectoryDirection = 'Northeast'; // Default assumption for most Florida launches
       analysisMethod = 'fallback';
-      console.log('[ImageAnalysis] Using default Northeast trajectory assumption');
     }
   }
   
@@ -181,7 +170,6 @@ async function analyzeTrajectoryFromFilename(imageUrl: string, launch?: Launch):
   const closestApproach = findClosestApproach(trajectoryPoints);
   const bearing = calculateBearing(bermuda, closestApproach.point);
   
-  console.log(`[ImageAnalysis] Determined ${trajectoryDirection} trajectory from ${analysisMethod}`);
   
   return {
     success: true,
@@ -474,7 +462,6 @@ function calculateDistance(point1: GeoPoint, point2: GeoPoint): number {
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function createFallbackAnalysis(imageUrl: string): TrajectoryImageAnalysis {
-  console.log('[ImageAnalysis] Creating fallback analysis');
   
   const trajectoryPoints = generateTrajectoryPoints('Northeast');
   const closestApproach = findClosestApproach(trajectoryPoints);

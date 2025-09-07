@@ -75,11 +75,10 @@ export function geoToPixel(
  * This is a placeholder for future OCR-based bounds detection
  */
 export function detectMapBounds(imageData: ImageData): MapBounds | null {
-  // TODO: Implement OCR-based coordinate detection
-  // This would scan the image for coordinate labels like "30°N", "-70°W" etc.
+  // Future enhancement: OCR-based coordinate detection
+  // Would scan the image for coordinate labels like "30°N", "-70°W" etc.
   // and automatically determine the map bounds
   
-  console.log('TODO: Auto-detect map bounds using OCR on coordinate labels');
   return null;
 }
 

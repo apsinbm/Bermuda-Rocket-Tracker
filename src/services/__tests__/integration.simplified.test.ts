@@ -252,7 +252,7 @@ describe('Integration Tests - Core Functionality', () => {
 
 // Custom matcher
 expect.extend({
-  toBeOneOf(received: any, expected: any[]) {
+  toBeOneOf<T>(received: T, expected: T[]) {
     const pass = expected.includes(received);
     return {
       message: () => `expected ${received} to be one of ${expected.join(', ')}`,

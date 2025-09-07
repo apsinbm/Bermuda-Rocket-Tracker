@@ -129,7 +129,6 @@ export class LaunchUpdateManager {
       
       const schedule = getRefreshInterval(timeUntilLaunch);
       
-      console.log(`[${launchId}] Next update in ${schedule.interval/1000}s - ${schedule.description}`);
       
       // Update the data
       this.updateCallback(launchId).catch(error => {
