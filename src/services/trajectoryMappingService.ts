@@ -63,7 +63,40 @@ const MISSION_TRAJECTORY_DATABASE: Record<string, TrajectoryMapping> = {
   // Other common SSO Earth observation missions
   'earth-observation': { azimuth: 140, direction: 'Southeast', confidence: 'high', source: 'database' },
   'landsat': { azimuth: 140, direction: 'Southeast', confidence: 'high', source: 'database' },
-  'sentinel': { azimuth: 140, direction: 'Southeast', confidence: 'high', source: 'database' }
+  'sentinel': { azimuth: 140, direction: 'Southeast', confidence: 'high', source: 'database' },
+  
+  // Internet constellation missions - Amazon Project Kuiper (51.9° inclination)
+  'project-kuiper': { azimuth: 52, direction: 'Northeast', confidence: 'high', source: 'database' },
+  'kuiper': { azimuth: 52, direction: 'Northeast', confidence: 'high', source: 'database' },
+  'ka-01': { azimuth: 52, direction: 'Northeast', confidence: 'high', source: 'database' },
+  'ka-02': { azimuth: 52, direction: 'Northeast', confidence: 'high', source: 'database' },
+  'ka-03': { azimuth: 52, direction: 'Northeast', confidence: 'high', source: 'database' },
+  'kf-01': { azimuth: 52, direction: 'Northeast', confidence: 'high', source: 'database' },
+  'kf-02': { azimuth: 52, direction: 'Northeast', confidence: 'high', source: 'database' },
+  
+  // OneWeb constellation missions
+  'oneweb': { azimuth: 87, direction: 'East', confidence: 'high', source: 'database' },
+  
+  // Rideshare missions (typically SSO)
+  'transporter': { azimuth: 135, direction: 'Southeast', confidence: 'high', source: 'database' },
+  'smallsat-express': { azimuth: 135, direction: 'Southeast', confidence: 'high', source: 'database' },
+  'rideshare': { azimuth: 135, direction: 'Southeast', confidence: 'high', source: 'database' },
+  
+  // National security missions
+  'nrol': { azimuth: 45, direction: 'Northeast', confidence: 'high', source: 'database' },
+  'national-reconnaissance': { azimuth: 45, direction: 'Northeast', confidence: 'high', source: 'database' },
+  
+  // NASA science missions
+  'lucy': { azimuth: 95, direction: 'East', confidence: 'high', source: 'database' },
+  'dart': { azimuth: 95, direction: 'East', confidence: 'high', source: 'database' },
+  'artemis': { azimuth: 51, direction: 'Northeast', confidence: 'high', source: 'database' },
+  'sls': { azimuth: 51, direction: 'Northeast', confidence: 'high', source: 'database' },
+  
+  // Commercial communication satellites
+  'eutelsat': { azimuth: 135, direction: 'Southeast', confidence: 'high', source: 'database' },
+  'ses': { azimuth: 135, direction: 'Southeast', confidence: 'high', source: 'database' },
+  'intelsat': { azimuth: 135, direction: 'Southeast', confidence: 'high', source: 'database' },
+  'sirius-xm': { azimuth: 130, direction: 'Southeast', confidence: 'high', source: 'database' }
 };
 
 /**
@@ -207,6 +240,11 @@ export function getTrajectoryMapping(launch: Launch): TrajectoryMapping {
     .replace(/\s+/g, '-')
     .replace(/[^\w-]/g, '')
     .toLowerCase();
+    
+  // Debug logging for Project Kuiper
+  if (missionName.includes('kuiper') || missionName.includes('ka-03') || missionName.includes('ka-') || launch.name.toLowerCase().includes('kuiper')) {
+    console.log(`[TrajectoryMapping] Project Kuiper lookup: Launch="${launch.name}", Mission="${missionName}", Key="${missionKey}"`);
+  }
   
   // Special handling for X-37B OTV missions  
   if (missionName.includes('x-37b') || missionName.includes('x37b') || 
@@ -251,7 +289,62 @@ export function getTrajectoryMapping(launch: Launch): TrajectoryMapping {
     }
   }
   
+  // Special handling for Project Kuiper missions
+  if (missionName.includes('project kuiper') || missionName.includes('kuiper') ||
+      missionName.includes('ka-') || missionName.includes('kf-')) {
+    console.log(`[TrajectoryMapping] Project Kuiper special handling triggered for "${missionName}"`);
+    return {
+      azimuth: 52,
+      direction: 'Northeast',
+      confidence: 'high',
+      source: 'database',
+      orbitParameters: {
+        inclination: 51.9, // Kuiper constellation inclination
+        apogee: 630,
+        perigee: 590,
+        orbitType: 'LEO'
+      }
+    };
+  }
+  
+  // Special handling for OneWeb missions
+  if (missionName.includes('oneweb')) {
+    return {
+      azimuth: 87,
+      direction: 'East',
+      confidence: 'high',
+      source: 'database',
+      orbitParameters: {
+        inclination: 87.4, // OneWeb constellation inclination (near-polar)
+        apogee: 1200,
+        perigee: 1200,
+        orbitType: 'LEO'
+      }
+    };
+  }
+  
+  // Special handling for Transporter rideshare missions
+  if (missionName.includes('transporter') || missionName.includes('rideshare') ||
+      missionName.includes('smallsat')) {
+    return {
+      azimuth: 135,
+      direction: 'Southeast',
+      confidence: 'high',
+      source: 'database',
+      orbitParameters: {
+        inclination: 97.6, // SSO inclination
+        apogee: 525,
+        perigee: 525,
+        orbitType: 'SSO'
+      }
+    };
+  }
+  
   if (MISSION_TRAJECTORY_DATABASE[missionKey]) {
+    // Debug logging for Project Kuiper
+    if (missionName.includes('project kuiper') || missionName.includes('ka-03')) {
+      console.log(`[TrajectoryMapping] Found database match for "${missionKey}":`, MISSION_TRAJECTORY_DATABASE[missionKey]);
+    }
     return MISSION_TRAJECTORY_DATABASE[missionKey];
   }
   
@@ -293,24 +386,26 @@ export function getTrajectoryMapping(launch: Launch): TrajectoryMapping {
  * This is different from launch azimuth - it's the direction to look FROM Bermuda
  */
 export function getViewingBearingFromBermuda(trajectoryMapping: TrajectoryMapping): number {
-  // Bermuda is southwest of Cape Canaveral
-  // To see rockets going northeast, look southwest (225°)
-  // To see rockets going southeast, look west-southwest (247°)
-  // To see rockets going east, look west (270°)
+  // Cape Canaveral is at bearing 259° (West) from Bermuda
+  // Calculate initial viewing direction based on rocket trajectory relative to launch site
   
   switch (trajectoryMapping.direction) {
     case 'Northeast':
-      return 225; // Southwest
+      return 247; // WSW - rockets appear to the left (south) of Cape Canaveral
     case 'East-Northeast':
-      return 240; // Southwest-West
+      return 253; // WSW - slightly south of Cape
     case 'East':
-      return 270; // West
+      return 259; // W - directly toward Cape Canaveral
     case 'East-Southeast':
-      return 280; // West-Northwest
+      return 265; // W - slightly north of Cape
     case 'Southeast':
-      return 300; // Northwest-West
+      return 270; // W - rockets appear to the right (north) of Cape Canaveral
+    case 'South':
+      return 275; // WNW - far north of Cape
+    case 'North':
+      return 240; // SW - far south of Cape
     default:
-      return 225; // Default southwest
+      return 259; // Default West toward Cape Canaveral
   }
 }
 

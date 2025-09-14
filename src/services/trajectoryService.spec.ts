@@ -7,10 +7,9 @@ import {
   getTrajectoryData,
   clearTrajectoryCache,
   getTrajectoryCache,
-  TrajectoryData,
-  TrajectoryPoint
+  TrajectoryData
 } from './trajectoryService';
-import { Launch } from '../types';
+import { Launch, TrajectoryPoint } from '../types';
 
 // Mock dependencies
 jest.mock('../utils/environmentUtils');
@@ -76,9 +75,9 @@ describe('trajectoryService', () => {
     test('should determine Northeast trajectory from trajectory points', () => {
       // Test the private determineTrajectoryDirection function through public API
       const points: TrajectoryPoint[] = [
-        { time: 0, latitude: 28.5, longitude: -80.6, altitude: 0, distance: 1200, bearing: 45, visible: false },
-        { time: 300, latitude: 30.0, longitude: -75.0, altitude: 150000, distance: 800, bearing: 45, visible: true },
-        { time: 600, latitude: 32.0, longitude: -70.0, altitude: 150000, distance: 600, bearing: 45, visible: true }
+        { time: 0, latitude: 28.5, longitude: -80.6, altitude: 0, distance: 1200, bearing: 45, aboveHorizon: false, elevationAngle: -2, visible: false, stage: 'first', engineStatus: 'burning' },
+        { time: 300, latitude: 30.0, longitude: -75.0, altitude: 150000, distance: 800, bearing: 45, aboveHorizon: true, elevationAngle: 15, visible: true, stage: 'separation', engineStatus: 'separation' },
+        { time: 600, latitude: 32.0, longitude: -70.0, altitude: 150000, distance: 600, bearing: 45, aboveHorizon: true, elevationAngle: 20, visible: true, stage: 'second-burn', engineStatus: 'burning' }
       ];
       
       // The bearing from start to end should be around 45 degrees (Northeast)
@@ -100,7 +99,7 @@ describe('trajectoryService', () => {
 
     test('should handle edge case with single trajectory point', () => {
       const points: TrajectoryPoint[] = [
-        { time: 0, latitude: 28.5, longitude: -80.6, altitude: 0, distance: 1200, bearing: 45, visible: false }
+        { time: 0, latitude: 28.5, longitude: -80.6, altitude: 0, distance: 1200, bearing: 45, aboveHorizon: false, elevationAngle: -2, visible: false, stage: 'first', engineStatus: 'burning' }
       ];
       
       // With single point, direction should be 'Unknown'

@@ -5,7 +5,7 @@
  */
 
 import { Launch } from '../types';
-import { FlightClubMission, flightClubApiService } from './flightClubApiService';
+import { FlightClubMission, FlightClubApiService } from './flightClubApiService';
 
 export type MatchConfidence = 'exact' | 'high' | 'medium' | 'low' | 'none';
 
@@ -31,12 +31,22 @@ class LaunchMatchingService {
    * Find the best FlightClub match for a Launch Library 2 launch
    */
   async findBestMatch(launch: Launch): Promise<LaunchMatch | null> {
-    // Check cache first
-    const cacheKey = `${launch.id}-${Date.now() < Date.now() + MATCH_CACHE_DURATION}`;
+    // Check IndexedDB cache first
+    try {
+      const { indexedDBCache } = await import('./indexedDBCache');
+      const cachedMatch = await indexedDBCache.getLaunchMatch(launch.id);
+      if (cachedMatch) {
+        console.log(`[LaunchMatching] Using cached match for ${launch.name}`);
+        return cachedMatch;
+      }
+    } catch (cacheError) {
+      console.warn('[LaunchMatching] Cache read failed:', cacheError);
+    }
+
+    // Fall back to memory cache
     if (matchCache.has(launch.id)) {
       return matchCache.get(launch.id) || null;
     }
-
 
     try {
       // Strategy 1: Exact match by Launch Library ID (most reliable)
@@ -44,7 +54,16 @@ class LaunchMatchingService {
       if (exactMatch) {
         const match = this.createMatchResult(exactMatch, 'exact', 100, 
           ['Exact Launch Library 2 ID match'], launch);
+        
+        // Cache both in memory and IndexedDB
         matchCache.set(launch.id, match);
+        try {
+          const { indexedDBCache } = await import('./indexedDBCache');
+          await indexedDBCache.cacheLaunchMatch(launch.id, match);
+        } catch (cacheError) {
+          console.warn('[LaunchMatching] Failed to cache exact match:', cacheError);
+        }
+        
         return match;
       }
 
@@ -53,9 +72,25 @@ class LaunchMatchingService {
       if (fuzzyMatches.length > 0) {
         const bestMatch = this.selectBestFuzzyMatch(fuzzyMatches, launch);
         if (bestMatch) {
+          // Cache both in memory and IndexedDB
           matchCache.set(launch.id, bestMatch);
+          try {
+            const { indexedDBCache } = await import('./indexedDBCache');
+            await indexedDBCache.cacheLaunchMatch(launch.id, bestMatch);
+          } catch (cacheError) {
+            console.warn('[LaunchMatching] Failed to cache fuzzy match:', cacheError);
+          }
+          
           return bestMatch;
         }
+      }
+
+      // Cache null result to avoid repeated failed lookups
+      try {
+        const { indexedDBCache } = await import('./indexedDBCache');
+        await indexedDBCache.cacheLaunchMatch(launch.id, null);
+      } catch (cacheError) {
+        console.warn('[LaunchMatching] Failed to cache null match:', cacheError);
       }
 
       return null;
@@ -71,7 +106,7 @@ class LaunchMatchingService {
    */
   private async findExactMatch(launch: Launch): Promise<FlightClubMission | null> {
     try {
-      const mission = await flightClubApiService.findMissionByLaunchLibraryId(launch.id);
+      const mission = await FlightClubApiService.findMissionForLaunch(launch.id, launch.name);
       if (mission) {
         return mission;
       }
@@ -93,11 +128,12 @@ class LaunchMatchingService {
     
 
     try {
-      const candidates = await flightClubApiService.searchMissionsByName(
-        missionName, 
-        launchProvider, 
-        launch.net
-      );
+      const { missions } = await FlightClubApiService.getMissions();
+      const candidates = missions.filter(mission => {
+        const missionNameLower = mission.description.toLowerCase();
+        const searchTermLower = missionName.toLowerCase();
+        return missionNameLower.includes(searchTermLower) || searchTermLower.includes(missionNameLower);
+      });
 
       return candidates;
 
@@ -349,32 +385,6 @@ class LaunchMatchingService {
     };
   }
 
-  /**
-   * Enrich launches with FlightClub data
-   */
-  async enrichLaunchesWithFlightClub(launches: Launch[]): Promise<LaunchWithFlightClub[]> {
-
-    const enrichedLaunches: LaunchWithFlightClub[] = [];
-
-    for (const launch of launches) {
-      const match = await this.findBestMatch(launch);
-      
-      const enrichedLaunch: LaunchWithFlightClub = {
-        ...launch,
-        flightClubMatch: match || undefined,
-        hasFlightClubData: !!match
-      };
-
-      enrichedLaunches.push(enrichedLaunch);
-
-      if (match) {
-      }
-    }
-
-    const matchCount = enrichedLaunches.filter(l => l.hasFlightClubData).length;
-
-    return enrichedLaunches;
-  }
 
   /**
    * Clear match cache
@@ -395,8 +405,8 @@ class LaunchMatchingService {
    */
   async validateSpecificMatch(launchId: string, flightClubMissionId: string): Promise<LaunchMatch | null> {
     try {
-      const missions = await flightClubApiService.getMissions();
-      const mission = missions.find(m => m.id === flightClubMissionId);
+      const { missions } = await FlightClubApiService.getMissions();
+      const mission = missions.find((m: FlightClubMission) => m.id === flightClubMissionId);
       
       if (!mission) {
         console.error(`[LaunchMatching] FlightClub mission ${flightClubMissionId} not found`);
@@ -420,6 +430,47 @@ class LaunchMatchingService {
       console.error(`[LaunchMatching] Error in manual validation:`, error);
       return null;
     }
+  }
+
+  /**
+   * Enrich an array of launches with FlightClub data
+   */
+  async enrichLaunchesWithFlightClub(launches: Launch[]): Promise<LaunchWithFlightClub[]> {
+    const enrichedLaunches: LaunchWithFlightClub[] = [];
+    
+    console.log(`[LaunchMatching] Enriching ${launches.length} launches with FlightClub data`);
+    
+    for (const launch of launches) {
+      try {
+        const match = await this.findBestMatch(launch);
+        
+        const enrichedLaunch: LaunchWithFlightClub = {
+          ...launch,
+          flightClubMatch: match || undefined,
+          hasFlightClubData: match !== null
+        };
+        
+        enrichedLaunches.push(enrichedLaunch);
+        
+        if (match) {
+          console.log(`[LaunchMatching] ✅ ${launch.name} → ${match.flightClubMission.description} (${match.confidence})`);
+        }
+        
+      } catch (error) {
+        console.error(`[LaunchMatching] Error enriching ${launch.name}:`, error);
+        
+        // Add launch without FlightClub data
+        enrichedLaunches.push({
+          ...launch,
+          hasFlightClubData: false
+        });
+      }
+    }
+    
+    const matchedCount = enrichedLaunches.filter(l => l.hasFlightClubData).length;
+    console.log(`[LaunchMatching] Enrichment complete: ${matchedCount}/${launches.length} launches matched`);
+    
+    return enrichedLaunches;
   }
 }
 

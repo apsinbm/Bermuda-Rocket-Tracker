@@ -5,6 +5,23 @@ A React web application that tracks upcoming SpaceX rocket launches visible from
 
 ## Current Status (September 7, 2025)
 
+### Latest Updates
+4. **Flight Club API Integration**: ✅ **COMPLETED** (September 7, 2025)
+   - **Added**: Secure API proxy infrastructure using Vercel serverless functions
+   - **Created**: `/api/flightclub/missions.ts` - Mission discovery with caching and rate limiting
+   - **Created**: `/api/flightclub/simulation/[missionId].ts` - Telemetry processing for Bermuda calculations
+   - **Created**: `/src/services/flightClubApiService.ts` - Client-side service with viewing instructions
+   - **Security**: API key protection, CORS handling, and production error handling
+   - **Performance**: 15-minute caching for missions, 5-minute caching for simulation data
+
+5. **Cross-Platform Mobile Optimization**: ✅ **COMPLETED** (September 7, 2025)
+   - **Enhanced Responsive Design**: Mobile-first approach with comprehensive breakpoint system
+   - **Touch Optimization**: 44px minimum touch targets, tap highlight removal, touch manipulation
+   - **iOS/Android Support**: Safe area insets for notched devices, platform-specific optimizations  
+   - **PWA Enhancements**: Mobile app capabilities, theme color support, orientation handling
+   - **Performance**: Hardware acceleration, smooth scrolling, reduced motion support
+   - **Accessibility**: Focus-visible support, keyboard navigation, screen reader compatibility
+
 ### Major Fixes Completed
 1. **Launch Data Not Displaying**: ✅ **FIXED** (August 6, 2025)
    - **Root Cause**: App was not filtering out completed launches by status
@@ -91,7 +108,49 @@ A React web application that tracks upcoming SpaceX rocket launches visible from
 ```bash
 npm start
 # Runs on http://localhost:3000
+# Note: FlightClub 3D visualization will use demo mode (API endpoints not available)
 ```
+
+### FlightClub Professional Features (3D Visualization)
+For full FlightClub Professional features with real trajectory data:
+
+1. **Set up API Key**:
+   ```bash
+   # Copy .env.example to .env
+   cp .env.example .env
+   
+   # Edit .env and add your FlightClub API key:
+   # FLIGHTCLUB_API_KEY=your_flight_club_api_key_here
+   ```
+
+2. **Use Vercel Development Server** (required for API endpoints):
+   ```bash
+   vercel dev
+   # Runs with API endpoints on http://localhost:3000
+   ```
+
+3. **Alternative Development Setup**:
+   ```bash
+   # Install Vercel CLI globally if not already installed
+   npm install -g vercel
+   
+   # Login to Vercel (if not already logged in)
+   vercel login
+   
+   # Run development server with API support
+   vercel dev
+   ```
+
+### Demo Mode vs Full Mode
+
+| Feature | `npm start` (Demo Mode) | `vercel dev` (Full Mode) |
+|---------|-------------------------|--------------------------|
+| Basic app functionality | ✅ | ✅ |
+| Launch visibility calculations | ✅ | ✅ |
+| FlightClub Professional tab | ✅ Demo data | ✅ Real data |
+| 3D trajectory visualization | ✅ Simulated | ✅ Real telemetry |
+| Mission matching | ✅ Demo mission | ✅ Real matching |
+| API endpoints | ❌ | ✅ |
 
 ### Production Mode
 ```bash
@@ -156,10 +215,17 @@ window.location.reload();
    - Space Launch Schedule images (secondary)
    - Orbital mechanics calculations (fallback)
 
+5. **flightClubApiService.ts**: Secure Flight Club telemetry integration
+   - Vercel serverless proxy for API key protection
+   - Real-time telemetry processing with Bermuda calculations
+   - Distance, bearing, elevation for each telemetry frame
+   - Comprehensive viewing instructions generation
+
 ### API Configuration
 - Primary: `https://ll.thespacedevs.com/2.2.0/launch/upcoming/`
 - Filters: `launch_service_provider__name=SpaceX&pad__location__name__icontains=florida`
 - Florida locations: Cape Canaveral, Kennedy Space Center, CAFS, KSC
+- **Flight Club**: `/api/flightclub/*` - Secure proxy for telemetry data (requires `FLIGHTCLUB_API_KEY`)
 
 ### Key Components
 - **LaunchCard**: Displays individual launch information
@@ -187,6 +253,46 @@ window.location.reload();
 - Try network IP (172.20.10.2) if local IPs fail
 - Check macOS firewall settings
 - Verify no proxy interference
+
+### FlightClub 3D Visualization Issues
+
+#### "FlightClub Data Unavailable" Error
+This error typically occurs due to:
+1. **Missing API Key**: Ensure `.env` file has `FLIGHTCLUB_API_KEY` set
+2. **Wrong Development Server**: Use `vercel dev` instead of `npm start` for API access
+3. **No Mission Match**: Launch not available in FlightClub database
+4. **API Quota Exceeded**: FlightClub API has usage limits
+
+#### Troubleshooting Steps
+1. **Check Development Mode**:
+   ```bash
+   # If you see "Demo Mode Active" in FlightClub tab, try:
+   vercel dev
+   ```
+
+2. **Verify API Key**:
+   ```bash
+   # Check if .env file exists and has the key
+   cat .env | grep FLIGHTCLUB_API_KEY
+   ```
+
+3. **Enable Demo Mode** (for testing without API):
+   ```javascript
+   // In browser console:
+   import('./services/flightClubApiService').then(module => 
+     module.FlightClubApiService.enableDemoMode(true)
+   );
+   ```
+
+4. **Check Browser Console**:
+   - Look for `[FlightClub]` prefixed messages
+   - Mission matching attempts are logged
+   - API errors will be displayed
+
+#### Expected Behavior
+- **With `npm start`**: Shows demo data with warning message
+- **With `vercel dev` + API key**: Shows real FlightClub data
+- **No mission found**: Falls back to basic visibility calculations
 
 ## Development Notes
 
@@ -254,12 +360,59 @@ src/
 ```
 
 ## Deployment
-Currently runs locally. For production deployment:
-1. Set up proper environment variables
-2. Configure CORS for API access
-3. Use proper SSL certificates
-4. Set up monitoring for API failures
-5. Implement proper error boundaries
+
+### Environment Variables
+Create `.env` file with:
+```bash
+# Required for Flight Club API integration
+# SECURITY: Get this from your team's secure key management system
+FLIGHTCLUB_API_KEY=your_flight_club_api_key_here
+
+# Required for production rate limiting (get free instance at upstash.com)
+UPSTASH_REDIS_REST_URL=your_upstash_redis_url_here
+UPSTASH_REDIS_REST_TOKEN=your_upstash_redis_token_here
+
+# Optional: Weather API key (get free key at openweathermap.org)
+REACT_APP_OPENWEATHER_API_KEY=your_openweathermap_api_key_here
+```
+
+**SECURITY NOTE**: Never commit actual API keys to version control. Use environment-specific configuration management.
+
+### Local Development
+```bash
+npm start
+# Runs on http://localhost:3000
+```
+
+### Production Deployment (Vercel)
+1. **Set up environment variables in Vercel dashboard:**
+   - `FLIGHTCLUB_API_KEY` = `[secure_key_from_team_vault]`
+   - `UPSTASH_REDIS_REST_URL` = `[redis_instance_url]`
+   - `UPSTASH_REDIS_REST_TOKEN` = `[redis_auth_token]`
+   - `REACT_APP_OPENWEATHER_API_KEY` = `[weather_api_key]` (optional)
+   
+2. **Deploy to Vercel:**
+   ```bash
+   npm run build
+   vercel --prod
+   ```
+
+3. **Verify API endpoints:**
+   - `/api/flightclub/missions` - Mission discovery (with rate limiting)
+   - `/api/flightclub/simulation/[missionId]` - Telemetry data (with input validation)
+
+4. **Security Features:**
+   - Edge Middleware with distributed rate limiting
+   - Origin validation and CORS protection
+   - Input validation for all API endpoints
+   - Security headers (CSP, HSTS, etc.)
+   - No hardcoded API keys in client code
+
+### Additional Production Steps
+1. Configure CORS for API access
+2. Use proper SSL certificates  
+3. Set up monitoring for API failures
+4. Implement proper error boundaries
 
 ## Contact & Support
 This project tracks SpaceX launches visible from Bermuda, calculating real-time visibility based on trajectory data and providing notifications for optimal viewing times.

@@ -212,12 +212,31 @@ export class LaunchDatabase {
    * Clear all data (for testing/reset)
    */
   clear(): void {
+    console.log('[LaunchDatabase] Clearing all stored launch data');
     localStorage.removeItem(this.STORAGE_KEY);
     localStorage.removeItem(this.METADATA_KEY);
   }
 
-  // Private helper methods
-  private getAllEntries(): LaunchCacheEntry[] {
+  /**
+   * Clear cache but preserve metadata
+   */
+  public clearCache(): void {
+    console.log('[LaunchDatabase] Clearing launch cache, preserving metadata');
+    const metadata = this.getMetadata();
+    localStorage.removeItem(this.STORAGE_KEY);
+    // Preserve metadata with updated timestamp
+    const updatedMetadata = {
+      ...metadata,
+      lastFullScan: Date.now(),
+      totalLaunches: 0
+    };
+    localStorage.setItem(this.METADATA_KEY, JSON.stringify(updatedMetadata));
+  }
+
+  /**
+   * Get all cache entries (for schedule change detection)
+   */
+  public getAllEntries(): LaunchCacheEntry[] {
     try {
       const data = localStorage.getItem(this.STORAGE_KEY);
       return data ? JSON.parse(data) : [];

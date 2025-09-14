@@ -4,8 +4,8 @@
  */
 
 // Constants
-const BERMUDA_LAT = 32.30;
-const BERMUDA_LON = -64.78;
+const BERMUDA_LAT = 32.3078;
+const BERMUDA_LON = -64.7505;
 const EARTH_RADIUS_M = 6_371_000; // meters
 
 export interface TelemetryFrame {

@@ -1,19 +1,10 @@
-import { Launch } from '../types';
+import { Launch, TrajectoryPoint } from '../types';
 
 // Bermuda coordinates for distance calculations
 const BERMUDA_LAT = 32.3078;
 const BERMUDA_LNG = -64.7505;
 const EARTH_RADIUS_KM = 6371;
 
-export interface TrajectoryPoint {
-  time: number; // seconds from liftoff
-  latitude: number;
-  longitude: number;
-  altitude: number; // meters
-  distance: number; // km from Bermuda
-  bearing: number; // degrees from Bermuda
-  visible: boolean; // within line-of-sight
-}
 
 export interface TrajectoryData {
   launchId: string;
@@ -65,13 +56,65 @@ function calculateBearing(lat1: number, lng1: number, lat2: number, lng2: number
 }
 
 /**
- * Calculate line-of-sight visibility based on altitude
- * Formula: cos θ = R/(R+h) where R=6,371km, h=altitude in km
+ * Calculate elevation angle above horizon from Bermuda's perspective
+ * Returns positive angle if above horizon, negative if below horizon
  */
-function calculateVisibilityRadius(altitudeMeters: number): number {
-  const altitudeKm = altitudeMeters / 1000;
-  const theta = Math.acos(EARTH_RADIUS_KM / (EARTH_RADIUS_KM + altitudeKm));
-  return EARTH_RADIUS_KM * theta;
+function calculateElevationAngle(distance: number, altitude: number): number {
+  const R = EARTH_RADIUS_KM; // Earth radius in km
+  
+  // Account for Earth's curvature - distant objects appear lower
+  const earthCurvature = (distance * distance) / (2 * R);
+  const apparentAltitude = altitude / 1000 - earthCurvature; // Convert altitude to km
+  
+  // Calculate elevation angle using proper trigonometry
+  const elevationRadians = Math.atan2(apparentAltitude, distance);
+  const elevationDegrees = elevationRadians * 180 / Math.PI;
+  
+  // Return actual angle (can be negative if below horizon)
+  return elevationDegrees;
+}
+
+/**
+ * Determine rocket stage and engine status from Flight Club telemetry data
+ * This will be enhanced to use actual Flight Club stage events when available
+ */
+function determineStageInfoFromTelemetry(timeSeconds: number, stageNumber?: number, events?: Array<{time: number, event: string, engineType?: string}>): { stage: TrajectoryPoint['stage'], engineStatus: TrajectoryPoint['engineStatus'] } {
+  // If we have Flight Club stage number, use it
+  if (stageNumber !== undefined) {
+    if (stageNumber === 1) {
+      // Check for MECO event to determine if engine is still burning
+      const mecoEvent = events?.find(e => e.event === 'MECO' && e.time <= timeSeconds);
+      return { 
+        stage: 'first', 
+        engineStatus: mecoEvent ? 'shutdown' : 'burning' 
+      };
+    } else if (stageNumber === 2) {
+      // Check for SECO events to determine MVac status
+      const secoEvent = events?.find(e => (e.event === 'SECO-1' || e.event === 'SECO-2') && e.time <= timeSeconds);
+      return { 
+        stage: secoEvent ? 'second-coast' : 'second-burn', 
+        engineStatus: secoEvent ? 'shutdown' : 'burning' 
+      };
+    }
+  }
+  
+  // Fallback to typical Falcon 9 flight profile timings when Flight Club data unavailable
+  const FIRST_STAGE_BURN_END = 162; // ~2:42 - First stage MECO
+  const STAGE_SEPARATION = 165; // ~2:45 - Stage separation
+  const SECOND_STAGE_IGNITION = 168; // ~2:48 - Second stage MVac ignition  
+  const SECOND_STAGE_BURN_END = 540; // ~9:00 - Second stage SECO-1
+  
+  if (timeSeconds <= FIRST_STAGE_BURN_END) {
+    return { stage: 'first', engineStatus: 'burning' };
+  } else if (timeSeconds <= STAGE_SEPARATION) {
+    return { stage: 'first', engineStatus: 'shutdown' };
+  } else if (timeSeconds <= SECOND_STAGE_IGNITION) {
+    return { stage: 'separation', engineStatus: 'separation' };
+  } else if (timeSeconds <= SECOND_STAGE_BURN_END) {
+    return { stage: 'second-burn', engineStatus: 'burning' };
+  } else {
+    return { stage: 'second-coast', engineStatus: 'shutdown' };
+  }
 }
 
 /**
@@ -82,8 +125,9 @@ function processTrajectoryPoints(points: Array<{time: number, lat: number, lng: 
   return points.map(point => {
     const distance = calculateDistance(BERMUDA_LAT, BERMUDA_LNG, point.lat, point.lng);
     const bearing = calculateBearing(BERMUDA_LAT, BERMUDA_LNG, point.lat, point.lng);
-    const visibilityRadius = calculateVisibilityRadius(point.alt);
-    const visible = distance <= visibilityRadius;
+    const elevationAngle = calculateElevationAngle(distance, point.alt);
+    const visible = elevationAngle > 0; // Above horizon check
+    const stageInfo = determineStageInfoFromTelemetry(point.time);
 
     return {
       time: point.time,
@@ -92,7 +136,11 @@ function processTrajectoryPoints(points: Array<{time: number, lat: number, lng: 
       altitude: point.alt,
       distance,
       bearing,
-      visible
+      aboveHorizon: visible,
+      elevationAngle,
+      visible,
+      stage: stageInfo.stage,
+      engineStatus: stageInfo.engineStatus
     };
   });
 }
@@ -156,22 +204,34 @@ function determineTrajectoryDirection(points: TrajectoryPoint[]): TrajectoryData
 /**
  * Fetch trajectory data from Flight Club telemetry API
  */
-async function fetchFlightClubTrajectory(launchLibraryId: string): Promise<TrajectoryData | null> {
+async function fetchFlightClubTrajectory(launchLibraryId: string, launch: Launch): Promise<TrajectoryData | null> {
   try {
-    // Import Flight Club service
-    const { getCachedTelemetry, analyzeVisibility } = await import('./flightClubService');
+    // Import Flight Club API service with enhanced telemetry
+    const { FlightClubApiService } = await import('./flightClubApiService');
     
-    // Fetch telemetry data
-    const telemetry = await getCachedTelemetry(launchLibraryId);
+    // Find mission for this launch
+    const missions = await FlightClubApiService.getMissions();
+    const mission = missions.missions.find((m: any) => m.launchLibraryId === launchLibraryId);
     
-    if (telemetry.length === 0) {
+    if (!mission) {
+      console.log(`[FlightClub] No mission found for Launch Library ID: ${launchLibraryId}`);
       return null;
     }
     
-    // Analyze visibility
-    const visibility = analyzeVisibility(telemetry);
+    // Get enhanced simulation data with stage information
+    const simulationData = await FlightClubApiService.getSimulationData(mission.id, launchLibraryId);
     
-    if (!visibility.isVisible) {
+    if (!simulationData.enhancedTelemetry || simulationData.enhancedTelemetry.length === 0) {
+      console.log(`[FlightClub] No telemetry data available for mission: ${mission.id}`);
+      return null;
+    }
+    
+    const telemetry = simulationData.enhancedTelemetry;
+    
+    // Check if any telemetry points are visible
+    const hasVisiblePoints = telemetry.some(frame => frame.aboveHorizon);
+    
+    if (!hasVisiblePoints) {
       return {
         launchId: launchLibraryId,
         source: 'flightclub',
@@ -180,35 +240,44 @@ async function fetchFlightClubTrajectory(launchLibraryId: string): Promise<Traje
       };
     }
     
-    // Convert telemetry to our trajectory format
-    const points: TrajectoryPoint[] = telemetry.map(frame => {
-      const distance = calculateDistance(BERMUDA_LAT, BERMUDA_LNG, frame.lat, frame.lon);
-      const bearing = calculateBearing(BERMUDA_LAT, BERMUDA_LNG, frame.lat, frame.lon);
-      const visibilityRadius = calculateVisibilityRadius(frame.alt);
+    // Convert enhanced telemetry to our trajectory format with stage information
+    const points: TrajectoryPoint[] = telemetry.map((frame: any) => {
+      // Enhanced telemetry already has calculated values
+      const distance = frame.distanceFromBermuda;
+      const bearing = frame.bearingFromBermuda;
+      const visible = frame.aboveHorizon;
+      
+      // Use Flight Club stage data if available, otherwise fallback to time-based estimation
+      const stageInfo = determineStageInfoFromTelemetry(frame.time, frame.stageNumber);
       
       return {
         time: frame.time,
-        latitude: frame.lat,
-        longitude: frame.lon,
-        altitude: frame.alt,
+        latitude: frame.latitude,
+        longitude: frame.longitude,
+        altitude: frame.altitude,
         distance,
         bearing,
-        visible: distance <= visibilityRadius
+        aboveHorizon: visible,
+        elevationAngle: frame.elevationAngle || calculateElevationAngle(distance, frame.altitude),
+        visible,
+        stage: stageInfo.stage,
+        engineStatus: stageInfo.engineStatus
       };
     });
     
-    // Calculate visibility window
-    const visibilityWindow = visibility.firstVisible && visibility.lastVisible ? {
-      startTime: visibility.firstVisible.time,
-      endTime: visibility.lastVisible.time,
-      startBearing: visibility.firstVisible.bearing,
-      endBearing: visibility.lastVisible.bearing,
-      closestApproach: visibility.closestApproach?.distance_km || 0
+    // Calculate visibility window from our processed points
+    const visiblePoints = points.filter(p => p.visible);
+    const visibilityWindow = visiblePoints.length > 0 ? {
+      startTime: visiblePoints[0].time,
+      endTime: visiblePoints[visiblePoints.length - 1].time,
+      startBearing: visiblePoints[0].bearing,
+      endBearing: visiblePoints[visiblePoints.length - 1].bearing,
+      closestApproach: Math.min(...visiblePoints.map(p => p.distance))
     } : undefined;
     
-    // Determine trajectory direction
-    const trajectoryDirection = determineTrajectoryDirection(points);
-    
+    // Determine trajectory direction and validate against database
+    const calculatedDirection = determineTrajectoryDirection(points);
+    const trajectoryDirection = validateTrajectoryDirection(launch, calculatedDirection);
     
     return {
       launchId: launchLibraryId,
@@ -395,7 +464,7 @@ export async function getTrajectoryData(launch: Launch): Promise<TrajectoryData>
     
     if (slsData.flightClubId) {
       // Step 2: Use Flight Club ID to fetch telemetry
-      const flightClubData = await fetchFlightClubTrajectory(slsData.flightClubId);
+      const flightClubData = await fetchFlightClubTrajectory(slsData.flightClubId, launch);
       if (flightClubData) {
         trajectoryData = {
           ...flightClubData,
@@ -427,7 +496,10 @@ export async function getTrajectoryData(launch: Launch): Promise<TrajectoryData>
             const points: TrajectoryPoint[] = analysis.trajectoryPoints.map((point, index) => {
               const distance = calculateDistance(BERMUDA_LAT, BERMUDA_LNG, point.lat, point.lng);
               const bearing = calculateBearing(BERMUDA_LAT, BERMUDA_LNG, point.lat, point.lng);
-              const visibilityRadius = calculateVisibilityRadius(150000);
+              const elevationAngle = calculateElevationAngle(distance, 150000);
+              
+              // Determine stage for this trajectory point
+              const stageInfo = determineStageInfoFromTelemetry(index * 30);
               
               return {
                 time: index * 30,
@@ -436,16 +508,25 @@ export async function getTrajectoryData(launch: Launch): Promise<TrajectoryData>
                 altitude: 150000,
                 distance,
                 bearing,
-                visible: distance <= visibilityRadius
+                aboveHorizon: elevationAngle > 0,
+                elevationAngle,
+                visible: elevationAngle > 0, // Above horizon check
+                stage: stageInfo.stage,
+                engineStatus: stageInfo.engineStatus
               };
             });
+            
+            // Validate trajectory direction against database mapping
+            const validatedDirection = slsData.trajectoryDirection ? 
+              validateTrajectoryDirection(launch, slsData.trajectoryDirection) : 
+              (analysis.trajectoryDirection ? validateTrajectoryDirection(launch, analysis.trajectoryDirection) : analysis.trajectoryDirection);
             
             trajectoryData = {
               launchId,
               source: 'spacelaunchschedule',
               points,
               imageUrl: slsData.trajectoryImageUrl,
-              trajectoryDirection: slsData.trajectoryDirection || analysis.trajectoryDirection,
+              trajectoryDirection: validatedDirection,
               confidence: 'projected',
               lastUpdated: new Date(),
               visibilityWindow: calculateVisibilityWindow(points)
@@ -453,10 +534,11 @@ export async function getTrajectoryData(launch: Launch): Promise<TrajectoryData>
             
           }
         } else {
-          // Server-safe filename analysis
+          // Server-safe filename analysis with validation
           const direction = analyzeTrajectoryFromFilename(slsData.trajectoryImageUrl, launch.mission.name);
           if (direction && direction !== 'Unknown') {
-            const estimatedTrajectory = generateTrajectoryFromDirection(launch, direction);
+            const validatedDirection = validateTrajectoryDirection(launch, direction);
+            const estimatedTrajectory = generateTrajectoryFromDirection(launch, validatedDirection as TrajectoryData['trajectoryDirection']);
             trajectoryData = {
               ...estimatedTrajectory,
               imageUrl: slsData.trajectoryImageUrl,
@@ -469,8 +551,9 @@ export async function getTrajectoryData(launch: Launch): Promise<TrajectoryData>
         console.error('Error analyzing trajectory image:', error);
       }
     } else if (slsData.trajectoryDirection) {
-      // Step 4: Use trajectory direction from filename
-      const estimatedTrajectory = generateTrajectoryFromDirection(launch, slsData.trajectoryDirection);
+      // Step 4: Use trajectory direction from filename with validation
+      const validatedDirection = validateTrajectoryDirection(launch, slsData.trajectoryDirection);
+      const estimatedTrajectory = generateTrajectoryFromDirection(launch, validatedDirection as TrajectoryData['trajectoryDirection']);
       trajectoryData = {
         ...estimatedTrajectory,
         confidence: 'projected',
@@ -589,6 +672,42 @@ function analyzeTrajectoryFromFilename(imageUrl: string, missionName: string): T
 }
 
 /**
+ * Validate external trajectory direction against database mapping
+ * Returns database direction if they conflict, otherwise returns external direction
+ */
+function validateTrajectoryDirection(launch: Launch, externalDirection: string | undefined): TrajectoryData['trajectoryDirection'] {
+  const { getTrajectoryMapping } = require('./trajectoryMappingService');
+  const trajectoryMapping = getTrajectoryMapping(launch);
+  
+  // Handle undefined external direction
+  if (!externalDirection) {
+    return trajectoryMapping?.direction as TrajectoryData['trajectoryDirection'] || 'Unknown';
+  }
+  
+  // If we have a high-confidence database mapping that differs from external data, use database
+  if (trajectoryMapping && trajectoryMapping.confidence === 'high' && 
+      trajectoryMapping.direction !== externalDirection) {
+    console.log(`[TrajectoryService] Database override: External "${externalDirection}" → Database "${trajectoryMapping.direction}" for ${launch.name}`);
+    
+    // Clear any cached trajectory data for this launch since we're overriding the direction
+    const cacheKey = launch.id;
+    if (trajectoryCache.has(cacheKey)) {
+      console.log(`[TrajectoryService] Clearing cached trajectory for ${launch.name} due to direction override`);
+      trajectoryCache.delete(cacheKey);
+    }
+    
+    return trajectoryMapping.direction as TrajectoryData['trajectoryDirection'];
+  }
+  
+  // Debug logging to track validation
+  if (launch.name.includes('Project Kuiper') || launch.name.includes('KA-03') || launch.mission.name.toLowerCase().includes('kuiper')) {
+    console.log(`[TrajectoryService] Project Kuiper validation: Launch="${launch.name}", Mission="${launch.mission.name}", External="${externalDirection}", Database="${trajectoryMapping?.direction}", Confidence="${trajectoryMapping?.confidence}"`);
+  }
+  
+  return externalDirection as TrajectoryData['trajectoryDirection'];
+}
+
+/**
  * Generate trajectory from known direction
  */
 function generateTrajectoryFromDirection(launch: Launch, direction: TrajectoryData['trajectoryDirection']): TrajectoryData {
@@ -608,13 +727,14 @@ function generateTrajectoryFromDirection(launch: Launch, direction: TrajectoryDa
   
   const azimuth = direction ? (azimuthMap[direction] || 50) : 50;
   
-  // Use existing trajectory generation but with known direction
+  // Use trajectory mapping from database (don't override with external data)
   const trajectoryMapping = getTrajectoryMapping(launch);
-  trajectoryMapping.azimuth = azimuth;
-  trajectoryMapping.direction = direction as any;
+  // Note: Previously this function would override the database trajectory mapping
+  // with external data, which could be incorrect. Now we trust the database.
   
   const trajectoryData = generateRealisticTrajectory(launch);
-  trajectoryData.trajectoryDirection = direction as any;
+  // Use the trajectory direction from the database mapping, not external sources
+  trajectoryData.trajectoryDirection = trajectoryMapping.direction as any;
   trajectoryData.source = 'spacelaunchschedule';
   
   return trajectoryData;
@@ -647,8 +767,35 @@ function generateRealisticTrajectory(launch: Launch): TrajectoryData {
   const startLng = coordinates.longitude;
   
   for (let t = 0; t <= 600; t += 30) { // Every 30 seconds
-    // Calculate position along trajectory
-    const distanceKm = t * 8; // ~8km per second average velocity
+    // Realistic velocity model for Falcon 9
+    let velocity; // km/s
+    let altitude; // meters
+    
+    if (t <= 162) {
+      // First stage burn: 0 to ~2.4 km/s, 0 to ~80km altitude
+      velocity = (t / 162) * 2.4;
+      altitude = Math.pow(t / 162, 1.8) * 80000; // Non-linear altitude gain
+    } else if (t <= 165) {
+      // Stage separation: maintain velocity, slight altitude gain
+      velocity = 2.4;
+      altitude = 80000 + (t - 162) * 1000; // +3km during separation
+    } else if (t <= 540) {
+      // Second stage burn: 2.4 to ~7.8 km/s, 80km to ~200km
+      const secondStageProgress = (t - 165) / (540 - 165);
+      velocity = 2.4 + secondStageProgress * 5.4; // Reach orbital velocity
+      altitude = 80000 + Math.pow(secondStageProgress, 1.2) * 120000; // Reach ~200km
+    } else {
+      // Coasting: maintain orbital velocity and altitude
+      velocity = 7.8;
+      altitude = 200000 + (t - 540) * 100; // Slight altitude increase
+    }
+    
+    // Calculate distance traveled (integral of velocity over time)
+    const distanceKm = t <= 30 ? t * 0.3 : // Start slow
+                      t <= 162 ? Math.pow(t / 162, 2) * 2.4 * 162 : // First stage acceleration
+                      t <= 165 ? 194 + (t - 162) * 2.4 : // Separation
+                      194 + 7.2 + ((t - 165) / (540 - 165)) * 1800; // Second stage
+    
     const azimuthRad = azimuth * Math.PI / 180;
     
     // Project position using great circle math
@@ -669,14 +816,22 @@ function generateRealisticTrajectory(launch: Launch): TrajectoryData {
     const lat = lat2Rad * 180 / Math.PI;
     const lng = lng2Rad * 180 / Math.PI;
     
-    // Altitude increases over time
-    const altitude = Math.max(0, (t - 120) * 300); // Start gaining altitude after T+2min
-    
     // Calculate distance and bearing from Bermuda
     const distance = calculateDistance(BERMUDA_LAT, BERMUDA_LNG, lat, lng);
     const bearing = calculateBearing(BERMUDA_LAT, BERMUDA_LNG, lat, lng);
-    const visibilityRadius = calculateVisibilityRadius(altitude);
-    const visible = distance <= visibilityRadius && altitude > 50000; // Must be above 50km
+    const elevationAngle = calculateElevationAngle(distance, altitude);
+    
+    // Enhanced visibility logic: ISS missions are visible at high altitudes
+    // Second stage visibility starts when rocket is above atmosphere and lit by sun
+    const isSecondStage = t > 165; // After stage separation
+    const isHighAltitude = altitude > 80000; // Above 80km (above atmosphere)
+    const hasReasonableElevation = elevationAngle > -2; // Allow slightly below horizon due to refraction
+    const withinVisibilityRange = distance < 1500; // Within 1500km visibility range
+    
+    const visible = isSecondStage && isHighAltitude && hasReasonableElevation && withinVisibilityRange;
+    
+    // Determine stage for this trajectory point
+    const stageInfo = determineStageInfoFromTelemetry(t);
     
     points.push({
       time: t,
@@ -685,7 +840,12 @@ function generateRealisticTrajectory(launch: Launch): TrajectoryData {
       altitude,
       distance,
       bearing,
-      visible
+      aboveHorizon: visible,
+      elevationAngle,
+      visible,
+      stage: stageInfo.stage,
+      engineStatus: stageInfo.engineStatus,
+      velocity: velocity * 1000 // Convert km/s to m/s for consistency
     });
   }
   
@@ -706,6 +866,22 @@ function generateRealisticTrajectory(launch: Launch): TrajectoryData {
  */
 export function clearTrajectoryCache(): void {
   trajectoryCache.clear();
+}
+
+/**
+ * Clear trajectory cache for Project Kuiper launches specifically
+ */
+export function clearProjectKuiperCache(): void {
+  const kuiperKeys = Array.from(trajectoryCache.keys()).filter(key => 
+    key.toLowerCase().includes('kuiper') || key.toLowerCase().includes('ka-')
+  );
+  
+  kuiperKeys.forEach(key => {
+    console.log(`[TrajectoryService] Clearing Project Kuiper cache for key: ${key}`);
+    trajectoryCache.delete(key);
+  });
+  
+  console.log(`[TrajectoryService] Cleared ${kuiperKeys.length} Project Kuiper trajectory cache entries`);
 }
 
 /**

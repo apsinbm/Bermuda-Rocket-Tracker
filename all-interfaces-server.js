@@ -5,6 +5,17 @@ const path = require('path');
 const PORT = 8080;
 const HOST = '0.0.0.0'; // Bind to all interfaces
 
+// SECURITY WARNING: Check if running in development
+if (process.env.NODE_ENV === 'production') {
+  console.error('⚠️  WARNING: This server should NOT be used in production!');
+  console.error('⚠️  Use proper deployment methods (Vercel, etc.) for production');
+  process.exit(1);
+}
+
+console.log('⚠️  SECURITY WARNING: This server binds to ALL network interfaces (0.0.0.0)');
+console.log('⚠️  Only use this on trusted networks for local development');
+console.log('⚠️  Never expose this server to the internet or public networks');
+
 const server = http.createServer((req, res) => {
   console.log(`Request: ${req.url}`);
   
@@ -24,6 +35,10 @@ const server = http.createServer((req, res) => {
       contentType = 'application/json';
       break;
   }
+  
+  // Basic security headers
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
   
   // Read and serve the file
   fs.readFile(filePath, (error, content) => {

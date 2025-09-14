@@ -34,9 +34,35 @@ export class ExhaustPlumeVisibilityCalculator {
     const launchTime = new Date(launch.net);
     const launchDate = new Date(launchTime.getFullYear(), launchTime.getMonth(), launchTime.getDate());
     
-    // Use government solar service for accurate sun times
-    const { GovernmentSolarService } = await import('./governmentSolarService');
-    const sunTimes = await GovernmentSolarService.getSolarDataForDate(launchDate);
+    // Use government solar service for accurate sun times with fallback
+    let sunTimes;
+    try {
+      const { GovernmentSolarService } = await import('./governmentSolarService');
+      sunTimes = await GovernmentSolarService.getSolarDataForDate(launchDate);
+    } catch (error) {
+      console.error('[ExhaustPlume] Solar data fetch failed, using fallback:', error);
+      // Fallback to simple calculated sun times for Bermuda
+      const { getAccurateSunTimes } = await import('../utils/accurateSunTimes');
+      const fallbackTimes = getAccurateSunTimes(launchDate);
+      
+      // Create USNOSolarData compatible object with estimated twilight times
+      const sunriseTime = fallbackTimes.sunrise.toTimeString().split(' ')[0];
+      const sunsetTime = fallbackTimes.sunset.toTimeString().split(' ')[0];
+      
+      sunTimes = {
+        date: launchDate.toISOString().split('T')[0],
+        sunrise: sunriseTime,
+        sunset: sunsetTime,
+        civil_twilight_begin: new Date(fallbackTimes.sunrise.getTime() - 30 * 60000).toTimeString().split(' ')[0],
+        civil_twilight_end: new Date(fallbackTimes.sunset.getTime() + 30 * 60000).toTimeString().split(' ')[0],
+        nautical_twilight_begin: new Date(fallbackTimes.sunrise.getTime() - 60 * 60000).toTimeString().split(' ')[0],
+        nautical_twilight_end: new Date(fallbackTimes.sunset.getTime() + 60 * 60000).toTimeString().split(' ')[0],
+        astronomical_twilight_begin: new Date(fallbackTimes.sunrise.getTime() - 90 * 60000).toTimeString().split(' ')[0],
+        astronomical_twilight_end: new Date(fallbackTimes.sunset.getTime() + 90 * 60000).toTimeString().split(' ')[0],
+        solar_noon: new Date((fallbackTimes.sunrise.getTime() + fallbackTimes.sunset.getTime()) / 2).toTimeString().split(' ')[0],
+        source: 'calculated' as const
+      };
+    }
     
     const plumeWindow = this.determinePlumeWindow(launchTime, sunTimes);
     const trajectoryMapping = getTrajectoryMapping(launch);

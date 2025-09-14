@@ -51,25 +51,28 @@ export class GovernmentSolarService {
     try {
       const usnoData = await this.fetchUSNOData(date);
       if (usnoData) {
+        console.log(`[GovernmentSolar] Successfully fetched USNO data for ${dateKey}`);
         this.cacheSolarData(dateKey, usnoData);
         return usnoData;
       }
     } catch (error) {
-      console.warn(`[GovernmentSolar] USNO API failed for ${dateKey}:`, error);
+      console.warn(`[GovernmentSolar] USNO API failed for ${dateKey}:`, error instanceof Error ? error.message : String(error));
     }
 
     // Try backup API
     try {
       const backupData = await this.fetchSunriseSunsetOrgData(date);
       if (backupData) {
+        console.log(`[GovernmentSolar] Successfully fetched backup data for ${dateKey}`);
         this.cacheSolarData(dateKey, backupData);
         return backupData;
       }
     } catch (error) {
-      console.warn(`[GovernmentSolar] Backup API failed for ${dateKey}:`, error);
+      console.warn(`[GovernmentSolar] Backup API failed for ${dateKey}:`, error instanceof Error ? error.message : String(error));
     }
 
     // Final fallback - use existing astronomical calculations
+    console.log(`[GovernmentSolar] Using calculated fallback for ${dateKey}`);
     const calculatedData = this.generateCalculatedFallback(date);
     this.cacheSolarData(dateKey, calculatedData);
     return calculatedData;

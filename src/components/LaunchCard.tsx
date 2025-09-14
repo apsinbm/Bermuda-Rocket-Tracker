@@ -8,7 +8,6 @@ import TrajectoryThumbnail from './TrajectoryThumbnail';
 import TrajectoryVisualization from './TrajectoryVisualization';
 import WeatherDisplay from './WeatherDisplay';
 import InteractiveSkyMap from './InteractiveSkyMap';
-import LiveViewingGuide from './LiveViewingGuide';
 import FlightClubVisualization from './FlightClubVisualization';
 
 interface LaunchCardProps {
@@ -33,7 +32,6 @@ const LaunchCard: React.FC<LaunchCardProps> = ({ launch, showDelayInfo = false }
   const [showSkyMap, setShowSkyMap] = useState(false);
   const [showWeatherDetail, setShowWeatherDetail] = useState(false);
   const [showDelayDetails, setShowDelayDetails] = useState(false);
-  const [showLiveGuide, setShowLiveGuide] = useState(false);
   const [showFlightClub, setShowFlightClub] = useState(false);
   
   // Type guard to check if launch has delay tracking
@@ -51,19 +49,17 @@ const LaunchCard: React.FC<LaunchCardProps> = ({ launch, showDelayInfo = false }
           setShowTrajectory(false);
         } else if (showSkyMap) {
           setShowSkyMap(false);
-        } else if (showLiveGuide) {
-          setShowLiveGuide(false);
         } else if (showFlightClub) {
           setShowFlightClub(false);
         }
       }
     };
 
-    if (showTrajectory || showSkyMap || showLiveGuide || showFlightClub) {
+    if (showTrajectory || showSkyMap || showFlightClub) {
       document.addEventListener('keydown', handleEscape);
       return () => document.removeEventListener('keydown', handleEscape);
     }
-  }, [showTrajectory, showSkyMap, showLiveGuide, showFlightClub]);
+  }, [showTrajectory, showSkyMap, showFlightClub]);
   
   
   const getVisibilityColor = (likelihood: string) => {
@@ -430,15 +426,6 @@ const LaunchCard: React.FC<LaunchCardProps> = ({ launch, showDelayInfo = false }
         {launch.visibility && (
           <div className="mt-3 space-y-2">
             {/* Primary Action Button */}
-            <div className="mb-3">
-              <button
-                onClick={() => setShowLiveGuide(!showLiveGuide)}
-                className="w-full px-4 py-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-lg transition-all duration-200 text-sm font-semibold shadow-lg transform hover:scale-105 flex items-center justify-center space-x-2"
-              >
-                <span>🚀</span>
-                <span>{showLiveGuide ? 'Close Live Guide' : 'Live Viewing Guide'}</span>
-              </button>
-            </div>
             
             {/* Secondary Action Buttons */}
             <div className="grid grid-cols-3 gap-2">
@@ -466,13 +453,13 @@ const LaunchCard: React.FC<LaunchCardProps> = ({ launch, showDelayInfo = false }
             </button>
             </div>
             
-            {/* FlightClub Professional Visualization Button */}
+            {/* Live Telemetry Visualization Button */}
             <div className="mt-3">
               <button
                 onClick={() => setShowFlightClub(!showFlightClub)}
                 className="w-full px-4 py-3 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white rounded-lg transition-all duration-200 text-sm font-bold shadow-lg border-2 border-red-500 hover:shadow-xl transform hover:scale-105"
               >
-                {showFlightClub ? '🚀 Hide FlightClub Pro' : '🚀 FlightClub Professional'}
+                {showFlightClub ? '🚀 Hide Live Telemetry' : '🚀 Live Telemetry'}
               </button>
             </div>
           </div>
@@ -578,16 +565,9 @@ const LaunchCard: React.FC<LaunchCardProps> = ({ launch, showDelayInfo = false }
         </div>
       )}
 
-      {/* Live Viewing Guide Modal */}
-      {showLiveGuide && (
-        <LiveViewingGuide
-          launch={launch}
-          onClose={() => setShowLiveGuide(false)}
-        />
-      )}
 
 
-      {/* FlightClub Professional Visualization Modal */}
+      {/* Live Telemetry Visualization Modal */}
       {showFlightClub && (
         <div 
           className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4"
@@ -601,7 +581,7 @@ const LaunchCard: React.FC<LaunchCardProps> = ({ launch, showDelayInfo = false }
             <button
               onClick={() => setShowFlightClub(false)}
               className="absolute top-4 right-4 z-10 p-2 rounded-full bg-gray-700 hover:bg-gray-600 text-white transition-colors"
-              title="Close FlightClub Professional"
+              title="Close Live Telemetry"
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

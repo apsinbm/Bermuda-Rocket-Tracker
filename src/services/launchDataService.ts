@@ -8,6 +8,7 @@ import { LaunchUpdateManager, getRefreshInterval, getUrgencyLevel } from './laun
 import { launchDatabase } from './launchDatabase';
 import { fetchAllFloridaLaunches } from './launchService';
 import { launchMatchingService } from './launchMatchingService';
+import { launchDelayDetectionService } from './launchDelayDetectionService';
 
 interface LaunchCache {
   data: Launch[];
@@ -119,14 +120,60 @@ export class LaunchDataService {
   }
   
   /**
-   * Check if cache should be refreshed
+   * Check if cache should be refreshed based on proximity to launches
    */
   private shouldRefreshCache(): boolean {
     const now = new Date().getTime();
     const cacheAge = now - this.cache.lastFetch;
     
-    // Refresh if cache is older than 5 minutes
-    return cacheAge > 5 * 60 * 1000;
+    // Find the next upcoming launch to determine refresh frequency
+    const nextLaunch = this.cache.data
+      .filter(launch => new Date(launch.net).getTime() > now)
+      .sort((a, b) => new Date(a.net).getTime() - new Date(b.net).getTime())[0];
+    
+    if (!nextLaunch) {
+      // No upcoming launches, use default 5-minute refresh
+      return cacheAge > 5 * 60 * 1000;
+    }
+    
+    const timeUntilLaunch = new Date(nextLaunch.net).getTime() - now;
+    const minutesUntilLaunch = Math.floor(timeUntilLaunch / (1000 * 60));
+    
+    // Aggressive refresh intervals based on time until launch
+    let maxCacheAge;
+    if (minutesUntilLaunch <= 15) {
+      maxCacheAge = 30 * 1000; // 30 seconds for final 15 minutes
+    } else if (minutesUntilLaunch <= 60) {
+      maxCacheAge = 2 * 60 * 1000; // 2 minutes for final hour
+    } else if (minutesUntilLaunch <= 360) { // 6 hours
+      maxCacheAge = 5 * 60 * 1000; // 5 minutes for final 6 hours
+    } else {
+      maxCacheAge = 30 * 60 * 1000; // 30 minutes otherwise
+    }
+    
+    return cacheAge > maxCacheAge;
+  }
+
+  /**
+   * Force clear all caches and reload fresh data
+   */
+  async forceClearCache(): Promise<void> {
+    console.log('[LaunchDataService] Force clearing all caches');
+    
+    // Clear in-memory cache
+    this.cache = {
+      data: [],
+      lastFetch: 0,
+      nextScheduledUpdate: 0
+    };
+    
+    // Clear database cache
+    launchDatabase.clearCache();
+    
+    // Force fresh API fetch
+    await this.fetchLaunches();
+    
+    console.log('[LaunchDataService] Cache cleared and fresh data loaded');
   }
   
   /**
@@ -145,6 +192,12 @@ export class LaunchDataService {
       const enrichedLaunches = await launchMatchingService.enrichLaunchesWithFlightClub(launches);
       
       const matchedCount = enrichedLaunches.filter(l => l.hasFlightClubData).length;
+      
+      // Detect schedule changes before storing new data
+      const scheduleChanges = launchDelayDetectionService.detectScheduleChanges(enrichedLaunches);
+      if (scheduleChanges.length > 0) {
+        console.log(`[LaunchDataService] Detected ${scheduleChanges.length} schedule changes`);
+      }
       
       // Store in database
       enrichedLaunches.forEach(launch => {

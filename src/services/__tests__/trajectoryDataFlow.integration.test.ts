@@ -51,7 +51,6 @@ const X37B_OTV8_LAUNCH: Launch = {
   mission: {
     name: 'X-37B Orbital Test Vehicle 8 (USSF-52)',
     description: 'Seventh mission of the X-37B Orbital Test Vehicle',
-    type: { name: 'Government/Top Secret' },
     orbit: { name: 'Low Earth Orbit' }
   },
   rocket: {
@@ -112,8 +111,8 @@ describe('trajectoryDataFlow integration', () => {
       if (result.bearing !== undefined) {
         expect(typeof result.bearing).toBe('number');
       }
-      expect(result.trajectoryData).toBeDefined();
-      expect(result.trajectoryData?.source).toBeIn(['flight-club', 'image-analysis', 'none']);
+      expect(result.dataSource).toBeDefined();
+      expect(result.dataSource).toBeIn(['flightclub', 'calculated', 'estimated']);
       // Real telemetry depends on successful Flight Club integration
     });
 
@@ -139,13 +138,13 @@ describe('trajectoryDataFlow integration', () => {
       const result = await calculateVisibility(STARLINK_GROUP_10_30);
 
       expect(result.likelihood).toBeIn(['high', 'medium', 'low', 'none']); // Fallback behavior varies
-      expect(result.trajectoryData).toBeDefined();
+      expect(result.dataSource).toBeDefined();
       
       if (isBrowser()) {
-        expect(result.trajectoryData?.source).toBeIn(['image-analysis', 'none']);
+        expect(result.dataSource).toBeIn(['calculated', 'estimated']);
       } else {
         // Should fallback to trajectory mapping in server environment
-        expect(result.trajectoryData?.source).toBe('none');
+        expect(result.dataSource).toBeIn(['calculated', 'estimated']);
       }
     });
 
@@ -158,8 +157,8 @@ describe('trajectoryDataFlow integration', () => {
       const result = await calculateVisibility(STARLINK_GROUP_10_30);
 
       expect(result.likelihood).toBeIn(['high', 'medium', 'low', 'none']); // Fallback behavior varies
-      expect(result.trajectoryData).toBeDefined();
-      expect(result.trajectoryData?.source).toBe('none');
+      expect(result.dataSource).toBeDefined();
+      expect(result.dataSource).toBeIn(['calculated', 'estimated']);
       
       // Should still calculate reasonable trajectory direction using mapping service
       const mapping = getTrajectoryMapping(STARLINK_GROUP_10_30);
@@ -195,7 +194,7 @@ describe('trajectoryDataFlow integration', () => {
 
       expect(result.likelihood).toBeIn(['none', 'medium']); // Should handle gracefully
       expect(result.reason).toBeDefined();
-      expect(result.trajectoryData).toBeDefined();
+      expect(result.dataSource).toBeDefined();
     });
   });
 
@@ -254,7 +253,7 @@ describe('trajectoryDataFlow integration', () => {
       // Should not crash and provide reasonable fallback
       expect(result.likelihood).toBeIn(['high', 'medium', 'low', 'none']);
       expect(result.reason).toBeDefined();
-      expect(result.trajectoryData).toBeDefined();
+      expect(result.dataSource).toBeDefined();
     });
 
     test('should handle missing browser APIs gracefully', async () => {
@@ -267,7 +266,7 @@ describe('trajectoryDataFlow integration', () => {
         
         // Should still provide valid result
         expect(result.likelihood).toBeIn(['high', 'medium', 'low', 'none']);
-        expect(result.trajectoryData).toBeDefined();
+        expect(result.dataSource).toBeDefined();
       } finally {
         global.window = originalWindow;
       }
@@ -431,7 +430,7 @@ describe('trajectoryDataFlow integration', () => {
         expect(result).toBeDefined();
         expect(['high', 'medium', 'low', 'none']).toContain(result.likelihood);
         expect(typeof result.reason).toBe('string');
-        expect(result.trajectoryData).toBeDefined();
+        expect(result.dataSource).toBeDefined();
       }
     });
   });
@@ -449,7 +448,7 @@ describe('trajectoryDataFlow integration', () => {
       expect(result.likelihood).toBeIn(['high', 'medium', 'low', 'none']); // System handles fallbacks gracefully
       expect(result.reason).toBeDefined(); // Should provide some reason
       // Bearing may be undefined in complete fallback scenarios
-      expect(result.trajectoryData?.source).toBe('none');
+      expect(result.dataSource).toBeIn(['calculated', 'estimated']);
     });
 
     test('should preserve trajectory mapping service functionality', async () => {

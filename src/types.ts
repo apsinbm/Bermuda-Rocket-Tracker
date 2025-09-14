@@ -359,3 +359,45 @@ export interface LaunchMonitoringState {
     gainedWindows: number;
   };
 }
+
+// Physics-based visibility calculation interfaces
+export interface VisibilityFactors {
+  geometricVisibility: boolean;  // Can it be seen above horizon?
+  maxAltitude: number;           // km - highest altitude during visible phase
+  closestApproach: number;       // km from Bermuda at closest point
+  visibilityWindow: {
+    start: number;  // T+ minutes when visibility begins
+    end: number;    // T+ minutes when visibility ends
+    duration: number; // minutes of total visibility
+  };
+  timeOfDay: 'day' | 'twilight' | 'night';
+  exhaustPlumeIlluminated: boolean; // Sun illuminating plume in dark sky
+  trajectoryDirection: string;   // Actual direction rocket is traveling (e.g., "Northeast")
+  initialViewingDirection: string;  // Where to first look from Bermuda (e.g., "Southwest")
+  trackingPath: string;         // How rocket moves across sky (e.g., "SW → W → NW → N")
+  maxViewingAngle: number;       // degrees above horizon at best visibility
+  visibilityReason?: string;     // Enhanced explanation of 2nd stage visibility window
+}
+
+export interface TrajectoryPoint {
+  time: number;      // T+ seconds from launch
+  latitude: number;  // degrees
+  longitude: number; // degrees
+  altitude: number;  // km above sea level (or meters when specified)
+  distance: number;  // km from Bermuda
+  bearing: number;   // degrees from Bermuda
+  aboveHorizon: boolean; // visible above horizon from Bermuda
+  elevationAngle: number; // degrees above horizon
+  visible: boolean;  // within line-of-sight (alias for aboveHorizon)
+  stage: 'first' | 'second-burn' | 'second-coast' | 'separation'; // rocket stage/phase
+  engineStatus: 'burning' | 'shutdown' | 'separation'; // engine status
+  velocity?: number; // m/s - rocket velocity (optional for compatibility)
+}
+
+export interface GeometricVisibilityResult {
+  isVisible: boolean;
+  likelihood: 'high' | 'medium' | 'low' | 'none';
+  reason: string;
+  factors: VisibilityFactors;
+  trajectoryPoints?: TrajectoryPoint[];
+}

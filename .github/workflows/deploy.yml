@@ -85,6 +85,7 @@ jobs:
       - name: Security linting
         run: |
           npm install eslint-plugin-security --save-dev
+          npx eslint src --ext .ts,.tsx
           echo "Security scan completed"
 
   # Deploy to Vercel Staging

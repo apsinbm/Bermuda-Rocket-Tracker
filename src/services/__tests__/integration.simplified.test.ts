@@ -74,7 +74,7 @@ describe('Integration Tests - Core Functionality', () => {
     
     if (launches.length > 0) {
       const launch = launches[0];
-      const visibility = calculateVisibility(launch);
+      const visibility = await calculateVisibility(launch);
       
       expect(visibility).toHaveProperty('likelihood');
       expect(['high', 'medium', 'low', 'none']).toContain(visibility.likelihood);
@@ -165,7 +165,7 @@ describe('Integration Tests - Core Functionality', () => {
     });
   });
 
-  test('should handle visibility calculations for different orbit types', () => {
+  test('should handle visibility calculations for different orbit types', async () => {
     const testLaunch: Launch = {
       id: 'visibility-test',
       name: 'Visibility Test Launch',
@@ -193,7 +193,7 @@ describe('Integration Tests - Core Functionality', () => {
 
     const orbitTypes = ['GTO', 'LEO', 'SSO', 'GEO'];
     
-    orbitTypes.forEach(orbitType => {
+    for (const orbitType of orbitTypes) {
       const launch = {
         ...testLaunch,
         mission: {
@@ -202,15 +202,15 @@ describe('Integration Tests - Core Functionality', () => {
         }
       };
       
-      const visibility = calculateVisibility(launch);
+      const visibility = await calculateVisibility(launch);
       
       expect(visibility).toHaveProperty('likelihood');
       expect(visibility).toHaveProperty('reason');
       expect(['high', 'medium', 'low', 'none']).toContain(visibility.likelihood);
-    });
+    }
   });
 
-  test('should handle launches with missing coordinate data', () => {
+  test('should handle launches with missing coordinate data', async () => {
     const launchWithoutCoords: Launch = {
       id: 'no-coords-test',
       name: 'No Coordinates Test',
@@ -231,7 +231,7 @@ describe('Integration Tests - Core Functionality', () => {
       webcast_live: false
     };
 
-    const visibility = calculateVisibility(launchWithoutCoords);
+    const visibility = await calculateVisibility(launchWithoutCoords);
     
     expect(visibility.likelihood).toBe('none');
     expect(visibility.reason).toContain('coordinates');

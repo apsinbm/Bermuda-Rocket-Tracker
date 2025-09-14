@@ -9,10 +9,13 @@
 // Bermuda timezone constant
 const BERMUDA_TIMEZONE = 'Atlantic/Bermuda';
 
+// Simple in-memory cache for sun times to avoid repeated API calls
+const sunTimesCache = new Map<string, any>();
+
 // Bermuda coordinates
 export const BERMUDA_COORDINATES = {
-  latitude: 32.2949,
-  longitude: -64.7823
+  latitude: 32.3078,
+  longitude: -64.7505
 };
 
 export interface BermudaTimeInfo {
@@ -138,6 +141,69 @@ export class BermudaTimeService {
     // Night time is from 6 PM (18:00) to 6 AM (06:00) in Bermuda local time
     return hour >= 18 || hour < 6;
   }
+
+  /**
+   * Get detailed lighting status for rocket visibility calculations
+   * - twilight: Optimal viewing (sun below horizon but illuminating high-altitude plume)
+   * - night: Good viewing (exhaust plume self-illumination visible)
+   * - day: Challenging viewing (daylight washes out exhaust glow)
+   */
+  static async getLightingStatus(utcDate?: Date | string): Promise<'twilight' | 'night' | 'day'> {
+    const time = utcDate ? (typeof utcDate === 'string' ? new Date(utcDate) : utcDate) : new Date();
+    
+    try {
+      // Get accurate sun times for the date
+      const sunTimes = await this.getSunTimes(time);
+      
+      // Convert all times to UTC for comparison
+      const currentUTC = time.getTime();
+      const sunriseUTC = sunTimes.sunrise.getTime();
+      const sunsetUTC = sunTimes.sunset.getTime();
+      const civilTwilightBeginUTC = sunTimes.civilTwilightBegin.getTime();
+      const civilTwilightEndUTC = sunTimes.civilTwilightEnd.getTime();
+      
+      // Determine lighting phase
+      if (currentUTC >= sunriseUTC && currentUTC <= sunsetUTC) {
+        return 'day';
+      } else if ((currentUTC >= civilTwilightBeginUTC && currentUTC < sunriseUTC) ||
+                 (currentUTC > sunsetUTC && currentUTC <= civilTwilightEndUTC)) {
+        return 'twilight';
+      } else {
+        return 'night';
+      }
+    } catch (error) {
+      console.warn('Failed to get detailed sun times for lighting status, using fallback');
+      // Fallback to simple hour-based logic
+      return this.getLightingStatusSync(time);
+    }
+  }
+
+  /**
+   * Synchronous version of lighting status calculation
+   * Uses approximate times based on hour of day
+   */
+  static getLightingStatusSync(utcDate?: Date | string): 'twilight' | 'night' | 'day' {
+    const time = utcDate ? (typeof utcDate === 'string' ? new Date(utcDate) : utcDate) : new Date();
+    const hour = time.getUTCHours();
+    
+    // Approximate times for Bermuda (32.3°N, -64.8°W)
+    // These are rough estimates - the async version uses precise calculations
+    if (hour >= 6 && hour <= 18) {
+      return 'day';
+    } else if ((hour >= 5 && hour < 6) || (hour > 18 && hour <= 20)) {
+      return 'twilight';
+    } else {
+      return 'night';
+    }
+  }
+
+  /**
+   * Check if time is within twilight period (optimal rocket viewing)
+   */
+  static async isTwilightTime(utcDate?: Date | string): Promise<boolean> {
+    const status = await this.getLightingStatus(utcDate);
+    return status === 'twilight';
+  }
   
   /**
    * Get UTC offset for Bermuda at a given time (accounting for DST)
@@ -177,8 +243,9 @@ export class BermudaTimeService {
     
     const currentOffset = this.getTimezoneOffset(utcDate);
     
-    // If current offset differs from January, DST is likely active
-    return currentOffset !== janOffset;
+    // If current offset differs from standard time (January), DST is active
+    // Also verify it matches summer time (July) for additional validation
+    return currentOffset !== janOffset && currentOffset === julyOffset;
   }
   
   /**
@@ -251,7 +318,15 @@ export class BermudaTimeService {
     const targetDate = date || new Date();
     const dateStr = targetDate.toISOString().split('T')[0];
     
+    // Check cache first to avoid repeated API calls
+    if (sunTimesCache.has(dateStr)) {
+      console.log(`[BermudaTimeService] Using cached sun times for ${dateStr}`);
+      return sunTimesCache.get(dateStr);
+    }
+    
     try {
+      console.log(`[BermudaTimeService] Fetching sun times for ${dateStr}`);
+      
       // Use sunrise-sunset.org API with Bermuda coordinates
       const response = await fetch(
         `https://api.sunrise-sunset.org/json?lat=${BERMUDA_COORDINATES.latitude}&lng=${BERMUDA_COORDINATES.longitude}&date=${dateStr}&formatted=0`
@@ -267,7 +342,7 @@ export class BermudaTimeService {
         throw new Error('Sun times API returned error');
       }
       
-      return {
+      const result = {
         sunrise: new Date(data.results.sunrise),
         sunset: new Date(data.results.sunset),
         civilTwilightBegin: new Date(data.results.civil_twilight_begin),
@@ -277,6 +352,20 @@ export class BermudaTimeService {
         astronomicalTwilightBegin: new Date(data.results.astronomical_twilight_begin),
         astronomicalTwilightEnd: new Date(data.results.astronomical_twilight_end)
       };
+      
+      // Cache the result for this session (avoid repeated API calls for same day)
+      sunTimesCache.set(dateStr, result);
+      
+      // Keep cache size reasonable (max 10 days)
+      if (sunTimesCache.size > 10) {
+        const firstKey = sunTimesCache.keys().next().value;
+        sunTimesCache.delete(firstKey);
+        console.log(`[BermudaTimeService] Cache cleanup: removed ${firstKey}`);
+      }
+      
+      console.log(`[BermudaTimeService] Cached sun times for ${dateStr}, cache size: ${sunTimesCache.size}`);
+      
+      return result;
     } catch (error) {
       console.warn('Failed to fetch sun times from API, using fallback calculation');
       

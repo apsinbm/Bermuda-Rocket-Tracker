@@ -2,19 +2,8 @@ import { Launch } from '../types';
 
 const API_BASE = 'https://ll.thespacedevs.com/2.2.0';
 
-// Major launch providers operating from Florida
-const FLORIDA_LAUNCH_PROVIDERS = [
-  'SpaceX',
-  'NASA',
-  'United Launch Alliance', // ULA
-  'Blue Origin',
-  'Relativity Space',
-  'Rocket Lab USA',
-  'Northrop Grumman', // Antares/Cygnus
-  'Boeing', // Starliner
-  'Lockheed Martin',
-  'Astra'
-];
+// Note: App now supports ALL launch providers operating from East Coast facilities
+// No provider filtering - any company can launch from visible East Coast sites
 
 // Cache management
 interface LaunchCache {
@@ -26,17 +15,18 @@ interface LaunchCache {
 let launchCache: LaunchCache | null = null;
 const CACHE_DURATION = 60 * 60 * 1000; // 1 hour in milliseconds
 
-export async function fetchAllFloridaLaunches(limit: number = 30): Promise<Launch[]> {
+export async function fetchAllEastCoastLaunches(limit: number = 30): Promise<Launch[]> {
   // Check cache first
   if (launchCache && Date.now() < launchCache.expiresAt) {
     return launchCache.data;
   }
 
   try {
-    // Use location IDs for more accurate filtering (KSC=27, CCAFS=12)
+    // Use location IDs for East Coast facilities visible from Bermuda
+    // KSC=27, CCAFS=12, Wallops=21
     const params = new URLSearchParams({
       limit: (limit * 2).toString(), // Get more results since we'll filter
-      location__ids: '27,12' // Kennedy Space Center, Cape Canaveral AFS
+      location__ids: '27,12,21' // Kennedy Space Center, Cape Canaveral AFS, Wallops Flight Facility
     });
 
     const response = await fetch(`${API_BASE}/launch/upcoming/?${params}`);
@@ -47,15 +37,8 @@ export async function fetchAllFloridaLaunches(limit: number = 30): Promise<Launc
     
     const data = await response.json();
     
-    // Filter for major launch providers and upcoming status
+    // Filter for upcoming status and East Coast locations (all providers welcome)
     const filteredLaunches = data.results.filter((launch: Launch) => {
-      // Check if launch provider is in our list
-      const providerName = launch.launch_service_provider?.name || '';
-      const isRelevantProvider = FLORIDA_LAUNCH_PROVIDERS.some(provider => 
-        providerName.toLowerCase().includes(provider.toLowerCase()) ||
-        provider.toLowerCase().includes(providerName.toLowerCase())
-      );
-
       // Filter out completed/cancelled launches
       const status = launch.status.name.toLowerCase();
       const isUpcoming = !(
@@ -65,18 +48,30 @@ export async function fetchAllFloridaLaunches(limit: number = 30): Promise<Launc
         status.includes('cancelled')
       );
 
-      // Additional location validation (ensure it's actually Florida)
+      // Additional location validation (ensure it's actually from our supported East Coast facilities)
       const locationName = launch.pad.location.name.toLowerCase();
-      const isFloridaLocation = (
+      const isEastCoastLocation = (
+        // Florida facilities
         locationName.includes('kennedy') ||
         locationName.includes('cape canaveral') ||
         locationName.includes('florida') ||
         locationName.includes('ksc') ||
         locationName.includes('cafs') ||
-        locationName.includes('ccafs')
+        locationName.includes('ccafs') ||
+        // Virginia facilities  
+        locationName.includes('wallops') ||
+        locationName.includes('virginia') ||
+        // Generic East Coast terms
+        locationName.includes('east coast') ||
+        locationName.includes('eastern shore')
       );
 
-      return isRelevantProvider && isUpcoming && isFloridaLocation;
+      // Log all providers for debugging
+      const provider = launch.launch_service_provider?.name || 'Unknown';
+      const location = launch.pad.location.name;
+      console.log(`[LaunchService] Found launch: ${launch.name} by ${provider} from ${location} - Upcoming: ${isUpcoming}, East Coast: ${isEastCoastLocation}`);
+
+      return isUpcoming && isEastCoastLocation;
     });
 
     // Sort by launch date
@@ -99,11 +94,12 @@ export async function fetchAllFloridaLaunches(limit: number = 30): Promise<Launc
       return acc;
     }, {});
 
+    console.log(`[LaunchService] Loaded ${sortedLaunches.length} upcoming East Coast launches from ALL providers:`, providerCounts);
 
     return sortedLaunches;
 
   } catch (error) {
-    console.error('[LaunchService] Error fetching Florida launches:', error);
+    console.error('[LaunchService] Error fetching East Coast launches:', error);
     
     // Return cached data if available, even if expired
     if (launchCache) {
@@ -114,22 +110,30 @@ export async function fetchAllFloridaLaunches(limit: number = 30): Promise<Launc
   }
 }
 
-// Legacy function for backward compatibility (SpaceX only)
+// Legacy function for backward compatibility (SpaceX only from Florida)
 export async function fetchSpaceXFloridaLaunches(limit: number = 15): Promise<Launch[]> {
-  const allLaunches = await fetchAllFloridaLaunches(limit * 2);
-  return allLaunches.filter(launch => 
-    launch.launch_service_provider?.name.toLowerCase().includes('spacex')
-  ).slice(0, limit);
+  const allLaunches = await fetchAllEastCoastLaunches(limit * 2);
+  return allLaunches.filter(launch => {
+    const provider = launch.launch_service_provider?.name.toLowerCase().includes('spacex');
+    const location = launch.pad.location.name.toLowerCase();
+    const isFloridaOnly = location.includes('florida') || location.includes('kennedy') || location.includes('cape canaveral');
+    return provider && isFloridaOnly;
+  }).slice(0, limit);
 }
 
-// Main function for all providers
+// Alias for backward compatibility
+export async function fetchAllFloridaLaunches(limit: number = 30): Promise<Launch[]> {
+  return fetchAllEastCoastLaunches(limit);
+}
+
+// Main function for all providers from East Coast
 export async function fetchUpcomingLaunches(limit: number = 20): Promise<Launch[]> {
-  return fetchAllFloridaLaunches(limit);
+  return fetchAllEastCoastLaunches(limit);
 }
 
-// Get launches by specific provider
+// Get launches by specific provider from East Coast
 export async function fetchLaunchesByProvider(providerName: string, limit: number = 10): Promise<Launch[]> {
-  const allLaunches = await fetchAllFloridaLaunches(limit * 3);
+  const allLaunches = await fetchAllEastCoastLaunches(limit * 3);
   return allLaunches.filter(launch => 
     launch.launch_service_provider?.name.toLowerCase().includes(providerName.toLowerCase())
   ).slice(0, limit);
@@ -152,7 +156,9 @@ export async function fetchLaunchDetails(launchId: string): Promise<Launch> {
 
 // Export launchService object for compatibility with existing imports
 export const launchService = {
-  getLaunches: fetchAllFloridaLaunches,
+  getLaunches: fetchAllEastCoastLaunches,
+  getEastCoastLaunches: fetchAllEastCoastLaunches,
+  getFloridaLaunches: fetchAllFloridaLaunches, // Backward compatibility
   getSpaceXLaunches: fetchSpaceXFloridaLaunches,
   getUpcomingLaunches: fetchUpcomingLaunches,
   getLaunchDetails: fetchLaunchDetails,

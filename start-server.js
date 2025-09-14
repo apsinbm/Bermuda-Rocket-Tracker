@@ -6,6 +6,16 @@ const PORT = 8080;
 
 console.log('🚀 Starting Bermuda Rocket Tracker...');
 
+// SECURITY WARNING: Check if running in development
+if (process.env.NODE_ENV === 'production') {
+  console.error('⚠️  WARNING: This server should NOT be used in production!');
+  console.error('⚠️  Use proper deployment methods (Vercel, etc.) for production');
+  process.exit(1);
+}
+
+console.log('⚠️  SECURITY NOTICE: This server is for LOCAL DEVELOPMENT ONLY');
+console.log('⚠️  Do not expose this on public networks or interfaces');
+
 const server = http.createServer((req, res) => {
   console.log(`📡 Request: ${req.url}`);
   
@@ -35,9 +45,20 @@ const server = http.createServer((req, res) => {
       break;
   }
   
-  // CORS headers for API calls
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE');
+  // SECURITY WARNING: This server is for LOCAL DEVELOPMENT ONLY
+  // Do not expose this server on public networks or interfaces
+  
+  // Security headers
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  
+  // Restricted CORS - only allow localhost
+  const allowedOrigins = ['http://localhost:3000', 'http://127.0.0.1:3000'];
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   
   // Read and serve the file
