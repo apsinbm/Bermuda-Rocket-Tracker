@@ -87,7 +87,10 @@ async function fetchMissionsFromFlightClub(): Promise<FlightClubMission[]> {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // SECURITY: CORS handled by middleware with origin validation
+  // Set CORS headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   
   // Handle preflight requests
   if (req.method === 'OPTIONS') {
@@ -149,7 +152,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     return res.status(500).json({ 
       error: 'Unable to fetch mission data',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      details: process.env.NODE_ENV === 'development' ? (error instanceof Error ? error.message : String(error)) : undefined
     });
   }
 }
