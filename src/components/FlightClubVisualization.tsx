@@ -39,25 +39,23 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [highlightedStage, setHighlightedStage] = useState<number | null>(null);
   
-  // Manual mission selection state
-  const [availableMissions, setAvailableMissions] = useState<FlightClubMission[]>([]);
-  const [showMissionPicker, setShowMissionPicker] = useState(false);
-  const [selectedMissionId, setSelectedMissionId] = useState<string>('');
+  // State management
   const [showLiveGuide, setShowLiveGuide] = useState(false);
 
-  // Handle manual mission selection
-  const handleManualMissionSelect = async (missionId: string) => {
+  // Handle mission selection (now used for auto-selection)
+  const handleMissionSelect = async (missionId: string) => {
     try {
       setLoading(true);
       setError(null);
-      setShowMissionPicker(false);
       
-      const selectedMission = availableMissions.find(m => m.id === missionId);
+      // Get the mission details from the API
+      const missionsResponse = await FlightClubApiService.getMissions();
+      const selectedMission = missionsResponse.missions.find(m => m.id === missionId);
       if (!selectedMission) {
         throw new Error('Selected mission not found');
       }
       
-      console.log(`[FlightClub] Manually selected mission: ${selectedMission.id} - ${selectedMission.description}`);
+      console.log(`[FlightClub] Auto-selected mission: ${selectedMission.id} - ${selectedMission.description}`);
       setFlightClubMission(selectedMission);
       
       // Get simulation data using the selected mission
@@ -117,32 +115,50 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
         const mission = await FlightClubApiService.findMissionForLaunch(launch.id, launch.name);
         
         if (!mission) {
-          console.log(`[FlightClub] No automatic match found for "${launch.name}", loading available missions for manual selection`);
+          console.log(`[FlightClub] No automatic match found for "${launch.name}", auto-selecting first available SpaceX mission`);
           
-          // Load available missions for manual selection
+          // Load available missions and auto-select the first suitable one
           const missionsResponse = await FlightClubApiService.getMissions();
-          setAvailableMissions(missionsResponse.missions);
-          setShowMissionPicker(true);
-          setError('no-match-found');
-          setLoading(false);
-          return;
+          const suitableMissions = missionsResponse.missions.filter(m => {
+            const company = m.company.description.toLowerCase();
+            const description = m.description.toLowerCase();
+            return company.includes('spacex') || 
+                   description.includes('starlink') || 
+                   description.includes('falcon') ||
+                   description.includes('crew') ||
+                   m.display;
+          });
+          
+          if (suitableMissions.length > 0) {
+            // Auto-select the first suitable mission
+            await handleMissionSelect(suitableMissions[0].id);
+            return;
+          } else {
+            // Fallback to first available mission
+            if (missionsResponse.missions.length > 0) {
+              await handleMissionSelect(missionsResponse.missions[0].id);
+              return;
+            }
+          }
         }
 
-        setFlightClubMission(mission);
-        console.log(`[FlightClub] Found mission: ${mission.id} - ${mission.description}`);
+        if (mission) {
+          setFlightClubMission(mission);
+          console.log(`[FlightClub] Found mission: ${mission.id} - ${mission.description}`);
 
-        // Get simulation data - prefer flightClubSimId over regular id
-        const missionIdToUse = mission.flightClubSimId || mission.id;
-        console.log(`[FlightClub] Using ${mission.flightClubSimId ? 'flightClubSimId' : 'fallback id'}: ${missionIdToUse} for mission: ${mission.description}`);
+          // Get simulation data - prefer flightClubSimId over regular id
+          const missionIdToUse = mission.flightClubSimId || mission.id;
+          console.log(`[FlightClub] Using ${mission.flightClubSimId ? 'flightClubSimId' : 'fallback id'}: ${missionIdToUse} for mission: ${mission.description}`);
         
-        const simData = await FlightClubApiService.getSimulationData(missionIdToUse, launch.id);
-        setSimulationData(simData);
-        
-        console.log(`[FlightClub] Loaded ${simData.enhancedTelemetry.length} telemetry frames`);
-        
-        // If we successfully loaded data, clear the development warning
-        if (error === 'development-mode-warning') {
-          setError(null);
+          const simData = await FlightClubApiService.getSimulationData(missionIdToUse, launch.id);
+          setSimulationData(simData);
+          
+          console.log(`[FlightClub] Loaded ${simData.enhancedTelemetry.length} telemetry frames`);
+          
+          // If we successfully loaded data, clear the development warning
+          if (error === 'development-mode-warning') {
+            setError(null);
+          }
         }
 
       } catch (error) {
@@ -204,7 +220,7 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
     );
   }
 
-  if (error && error !== 'development-mode-warning' && error !== 'no-match-found') {
+  if (error && error !== 'development-mode-warning') {
     return (
       <div className={`p-8 text-center ${darkMode ? 'bg-gray-900 text-white' : 'bg-gray-50 text-gray-600'} rounded-lg border-2 border-dashed ${darkMode ? 'border-gray-600' : 'border-gray-300'}`}>
         <div className="text-lg font-medium text-red-400 mb-2">⚠️ FlightClub Data Unavailable</div>
@@ -217,65 +233,6 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
     );
   }
 
-  // Show manual mission picker when no automatic match is found
-  if (error === 'no-match-found' && showMissionPicker && availableMissions.length > 0) {
-    return (
-      <div className={`p-8 ${darkMode ? 'bg-gray-900 text-white' : 'bg-gray-50 text-gray-600'} rounded-lg border-2 border-dashed ${darkMode ? 'border-gray-600' : 'border-gray-300'}`}>
-        <div className="text-lg font-medium text-yellow-400 mb-4">🎯 Manual Mission Selection Required</div>
-        <div className="text-sm opacity-75 mb-6">
-          No automatic match found for "<span className="font-medium">{launch.name}</span>".
-          Please select the corresponding FlightClub mission from the list below:
-        </div>
-        
-        <div className="space-y-3 max-h-60 overflow-y-auto">
-          {availableMissions
-            .filter(mission => {
-              // Show SpaceX and similar missions first
-              const company = mission.company.description.toLowerCase();
-              const description = mission.description.toLowerCase();
-              return company.includes('spacex') || 
-                     description.includes('starlink') || 
-                     description.includes('falcon') ||
-                     description.includes('crew') ||
-                     mission.display;
-            })
-            .slice(0, 20) // Limit to 20 missions for better UX
-            .map(mission => (
-              <button
-                key={mission.id}
-                onClick={() => handleManualMissionSelect(mission.id)}
-                className={`w-full text-left p-3 rounded-lg border transition-all ${
-                  darkMode 
-                    ? 'border-gray-600 bg-gray-800 hover:bg-gray-700 hover:border-blue-500' 
-                    : 'border-gray-300 bg-white hover:bg-blue-50 hover:border-blue-400'
-                }`}
-              >
-                <div className="font-medium text-sm">{mission.description}</div>
-                <div className="text-xs opacity-60 mt-1">
-                  {mission.company.description} • {mission.vehicle.description}
-                  {mission.startDateTime && (
-                    <> • {new Date(mission.startDateTime).toLocaleDateString()}</>
-                  )}
-                </div>
-              </button>
-            ))}
-        </div>
-        
-        <div className="mt-6 pt-4 border-t border-gray-600">
-          <button
-            onClick={() => setShowMissionPicker(false)}
-            className={`px-4 py-2 rounded-lg text-sm ${
-              darkMode 
-                ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' 
-                : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
-            }`}
-          >
-            Cancel and show basic data
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   // Development mode warning (but still show data)
   const showDevWarning = error === 'development-mode-warning';
@@ -302,28 +259,6 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
 
   return (
     <div className={`space-y-6 p-6 ${themeClasses.background} ${themeClasses.text} rounded-lg`}>
-      {/* Development mode warning */}
-      {(showDevWarning || isDemo) && (
-        <div className={`p-4 rounded-lg border ${darkMode ? 'bg-blue-900 border-blue-700 text-blue-200' : 'bg-blue-50 border-blue-200 text-blue-800'}`}>
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-lg">ℹ️</span>
-            <div className="font-medium">
-              {showDevWarning ? 'Development Mode Detected' : 'Demo Mode Active'}
-            </div>
-          </div>
-          <div className="text-sm">
-            {showDevWarning ? (
-              <>
-                API endpoints not available with <code className="bg-gray-700 px-1 rounded">npm start</code>. 
-                For full FlightClub features, use <code className="bg-gray-700 px-1 rounded">vercel dev</code> instead.
-                <br />Currently showing demo data for demonstration purposes.
-              </>
-            ) : (
-              <>Using simulated trajectory data for demonstration. Real FlightClub data requires API access.</>
-            )}
-          </div>
-        </div>
-      )}
       
       {/* Header with mission info and controls */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
