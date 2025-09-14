@@ -57,48 +57,63 @@ describe('Integration Tests - Core Functionality', () => {
     
     expect(Array.isArray(launches)).toBe(true);
     expect(launches.length).toBeGreaterThanOrEqual(0);
+  });
+
+  test('should have correct structure when launches exist', async () => {
+    const launches = await launchDataService.getLaunches();
     
-    if (launches.length > 0) {
-      const launch = launches[0];
-      expect(launch).toHaveProperty('id');
-      expect(launch).toHaveProperty('name');
-      expect(launch).toHaveProperty('net');
-      expect(launch).toHaveProperty('mission');
-      expect(launch).toHaveProperty('rocket');
-      expect(launch).toHaveProperty('pad');
-    }
+    // With our mock data, we expect at least one launch
+    expect(launches.length).toBeGreaterThan(0);
+    
+    const launch = launches[0];
+    expect(launch).toHaveProperty('id');
+    expect(launch).toHaveProperty('name');
+    expect(launch).toHaveProperty('net');
+    expect(launch).toHaveProperty('mission');
+    expect(launch).toHaveProperty('rocket');
+    expect(launch).toHaveProperty('pad');
   });
 
   test('should calculate visibility for valid launches', async () => {
     const launches = await launchDataService.getLaunches();
     
-    if (launches.length > 0) {
-      const launch = launches[0];
-      const visibility = await calculateVisibility(launch);
-      
-      expect(visibility).toHaveProperty('likelihood');
-      expect(['high', 'medium', 'low', 'none']).toContain(visibility.likelihood);
-      expect(visibility).toHaveProperty('reason');
-      expect(typeof visibility.reason).toBe('string');
-      
-      if (visibility.bearing) {
-        expect(typeof visibility.bearing).toBe('number');
-        expect(visibility.bearing).toBeGreaterThanOrEqual(0);
-        expect(visibility.bearing).toBeLessThanOrEqual(360);
-      }
-    }
+    // With our mock data, we expect at least one launch
+    expect(launches.length).toBeGreaterThan(0);
+    
+    const launch = launches[0];
+    const visibility = await calculateVisibility(launch);
+    
+    expect(visibility).toHaveProperty('likelihood');
+    expect(['high', 'medium', 'low', 'none']).toContain(visibility.likelihood);
+    expect(visibility).toHaveProperty('reason');
+    expect(typeof visibility.reason).toBe('string');
+  });
+
+  test('should have bearing property in visibility result', async () => {
+    const launches = await launchDataService.getLaunches();
+    expect(launches.length).toBeGreaterThan(0);
+    
+    const launch = launches[0];
+    const visibility = await calculateVisibility(launch);
+    
+    // Test bearing properties - can be undefined or a valid number
+    expect(visibility).toHaveProperty('bearing');
+    
+    // If bearing exists, extract it for separate testing
+    const { bearing } = visibility;
+    
+    // Test that bearing is either undefined or a valid number
+    expect(bearing === undefined || (typeof bearing === 'number' && bearing >= 0 && bearing <= 360)).toBe(true);
   });
 
   test('should handle API errors gracefully', async () => {
     (fetch as jest.Mock).mockRejectedValueOnce(new Error('Network error'));
     
     // Service should handle errors gracefully, might return empty array or throw
-    try {
+    await expect(async () => {
       const launches = await launchDataService.getLaunches();
       expect(Array.isArray(launches)).toBe(true);
-    } catch (error) {
-      expect(error).toBeInstanceOf(Error);
-    }
+    }).resolves.not.toThrow();
   });
 
   test('should handle subscription system', async () => {

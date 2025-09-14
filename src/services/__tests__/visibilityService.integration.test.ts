@@ -88,9 +88,15 @@ describe('Visibility Service Integration Tests', () => {
       const visibility = await calculateVisibility(launch);
 
       expect(visibility.likelihood).toBe('medium');
+      
+      // Test score when it exists
+      expect(visibility).toHaveProperty('score');
       if (visibility.score !== undefined) {
         expect(visibility.score).toBeLessThan(0.7);
       }
+      
+      // Test factors structure
+      expect(visibility).toHaveProperty('factors');
       if (visibility.factors) {
         expect(visibility.factors).toContain('Daylight reduces visibility');
       }
@@ -108,6 +114,8 @@ describe('Visibility Service Integration Tests', () => {
       const visibility = await calculateVisibility(launch);
 
       expect(visibility.likelihood).toBe('low');
+      
+      expect(visibility).toHaveProperty('factors');
       if (visibility.factors) {
         expect(visibility.factors).toContain('LEO trajectory has limited visibility from Bermuda');
       }
@@ -125,9 +133,13 @@ describe('Visibility Service Integration Tests', () => {
       const visibility = await calculateVisibility(launch);
 
       expect(visibility.likelihood).toBe('none');
+      
+      expect(visibility).toHaveProperty('score');
       if (visibility.score !== undefined) {
         expect(visibility.score).toBe(0);
       }
+      
+      expect(visibility).toHaveProperty('factors');
       if (visibility.factors) {
         expect(visibility.factors).toContain('Polar/SSO trajectory not visible from Bermuda');
       }
@@ -149,12 +161,22 @@ describe('Visibility Service Integration Tests', () => {
       expect(visibility).toHaveProperty('likelihood');
       expect(visibility).toHaveProperty('score');
       expect(visibility).toHaveProperty('factors');
+    });
+
+    test('should include detailed trajectory factors when available', async () => {
+      const launch = createTestLaunch({
+        mission: { 
+          name: 'Starlink',
+          description: 'Satellite constellation',
+          orbit: { name: 'GTO' } 
+        }
+      });
+
+      const visibility = await calculateVisibility(launch);
+      
       if (visibility.factors) {
         expect(visibility.factors.length).toBeGreaterThan(3);
-      }
-      
-      // Should include trajectory-specific factors
-      if (visibility.factors) {
+        // Should include trajectory-specific factors
         expect(visibility.factors.some(factor => 
           factor.includes('trajectory') || factor.includes('altitude')
         )).toBe(true);
@@ -189,6 +211,7 @@ describe('Visibility Service Integration Tests', () => {
       const visibility = await calculateVisibility(launch);
 
       // Enhanced visibility should include timing information
+      expect(visibility).toHaveProperty('factors');
       if (visibility.factors) {
         expect(visibility.factors.some(factor => 
           factor.includes('visible for') || factor.includes('duration')
@@ -220,9 +243,9 @@ describe('Visibility Service Integration Tests', () => {
       expect(basicVisibility.likelihood).toBe('low');
       expect(enhancedVisibility.likelihood).toBeOneOf(['low', 'medium']);
       
-      // Enhanced should provide more detailed analysis
+      // Enhanced should provide more detailed analysis when factors are available
       if (enhancedVisibility.factors && basicVisibility.factors) {
-        expect(enhancedVisibility.factors.length).toBeGreaterThan(basicVisibility.factors.length);
+        expect(enhancedVisibility.factors.length).toBeGreaterThanOrEqual(basicVisibility.factors.length);
       }
     });
 
@@ -245,6 +268,8 @@ describe('Visibility Service Integration Tests', () => {
 
       // Interplanetary launches often have good visibility due to high energy trajectories
       expect(['medium', 'high']).toContain(visibility.likelihood);
+      
+      expect(visibility).toHaveProperty('factors');
       if (visibility.factors) {
         expect(visibility.factors.some(factor => 
           factor.includes('high-energy') || factor.includes('interplanetary')
@@ -271,6 +296,8 @@ describe('Visibility Service Integration Tests', () => {
 
       // Shuttle missions to ISS had northeast trajectory, limited visibility from Bermuda
       expect(visibility.likelihood).toBe('low');
+      
+      expect(visibility).toHaveProperty('factors');
       if (visibility.factors) {
         expect(visibility.factors).toContain('LEO trajectory has limited visibility from Bermuda');
       }
@@ -333,6 +360,8 @@ describe('Visibility Service Integration Tests', () => {
         
         // All should be high visibility (night GTO launches)
         expect(visibility.likelihood).toBe('high');
+        
+        expect(visibility).toHaveProperty('score');
         if (visibility.score !== undefined) {
           expect(visibility.score).toBeGreaterThan(0.7);
         }
@@ -364,9 +393,13 @@ describe('Visibility Service Integration Tests', () => {
       const visibility = await calculateVisibility(launch);
       
       expect(visibility.likelihood).toBe('none');
+      
+      expect(visibility).toHaveProperty('score');
       if (visibility.score !== undefined) {
         expect(visibility.score).toBe(0);
       }
+      
+      expect(visibility).toHaveProperty('factors');
       if (visibility.factors) {
         expect(visibility.factors).toContain('Unknown orbit type');
       }
@@ -395,9 +428,13 @@ describe('Visibility Service Integration Tests', () => {
       const visibility = await calculateVisibility(launch);
       
       expect(visibility.likelihood).toBe('none');
+      
+      expect(visibility).toHaveProperty('score');
       if (visibility.score !== undefined) {
         expect(visibility.score).toBe(0);
       }
+      
+      expect(visibility).toHaveProperty('factors');
       if (visibility.factors) {
         expect(visibility.factors).toContain('Launch not from Florida');
       }

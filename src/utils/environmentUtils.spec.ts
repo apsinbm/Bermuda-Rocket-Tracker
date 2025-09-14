@@ -76,10 +76,8 @@ describe('environmentUtils', () => {
       const browserResult = isBrowser();
       const imageResult = hasImageSupport();
       
-      // If not in browser, should definitely be false
-      if (!browserResult) {
-        expect(imageResult).toBe(false);
-      }
+      // Image support should always be false when not in browser environment
+      expect(browserResult || !imageResult).toBe(true);
     });
   });
 

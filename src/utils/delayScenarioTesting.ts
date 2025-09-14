@@ -381,8 +381,8 @@ export class DelayScenarioTester {
       return 'poor';
     }
     
-    // Check for key elements
-    const hasEmoji = /[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/u.test(message);
+    // Check for key elements - simplified regex patterns for safety
+    const hasEmoji = /[\u{1F680}-\u{1F6FF}]/u.test(message) || /🚀|📡|🛰️|🌟|⭐/u.test(message);
     const hasTimeInfo = /\d+.*minutes?|hour/i.test(message);
     const hasVisibilityInfo = /visibility|viewing|window/i.test(message);
     const hasActionable = /check|look|watch|updated/i.test(message);

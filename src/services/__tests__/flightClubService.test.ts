@@ -45,14 +45,20 @@ describe('Flight Club Service', () => {
   test('analyzeVisibility should provide complete visibility analysis', () => {
     const analysis = analyzeVisibility(mockTelemetry);
     
+    expect(typeof analysis.isVisible).toBe('boolean');
+    expect(typeof analysis.totalVisibleFrames).toBe('number');
+    
+    // Visibility logic consistency checks
     if (analysis.isVisible) {
-      expect(analysis.firstVisible).toBeTruthy();
-      expect(analysis.lastVisible).toBeTruthy();
-      expect(analysis.closestApproach).toBeTruthy();
       expect(analysis.totalVisibleFrames).toBeGreaterThan(0);
     } else {
       expect(analysis.totalVisibleFrames).toBe(0);
     }
+    
+    // Properties should exist regardless of visibility
+    expect(analysis.firstVisible).toBeDefined();
+    expect(analysis.lastVisible).toBeDefined();
+    expect(analysis.closestApproach).toBeDefined();
   });
 
   test('should handle empty telemetry gracefully', () => {

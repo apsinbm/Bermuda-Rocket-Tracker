@@ -23,6 +23,8 @@ export interface PlatformInfo {
   prefersReducedMotion: boolean;
   prefersDarkMode: boolean;
   isOnline: boolean;
+  supportsWebGL: boolean;
+  supportsWebGL2: boolean;
 }
 
 export function detectPlatform(): PlatformInfo {
@@ -48,6 +50,8 @@ export function detectPlatform(): PlatformInfo {
       prefersReducedMotion: false,
       prefersDarkMode: false,
       isOnline: true,
+      supportsWebGL: false,
+      supportsWebGL2: false,
     };
   }
 
@@ -112,6 +116,27 @@ export function detectPlatform(): PlatformInfo {
   // Network status
   const isOnline = navigator.onLine;
 
+  // WebGL support detection
+  const supportsWebGL = (() => {
+    try {
+      const canvas = document.createElement('canvas');
+      const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+      return gl !== null;
+    } catch (e) {
+      return false;
+    }
+  })();
+
+  const supportsWebGL2 = (() => {
+    try {
+      const canvas = document.createElement('canvas');
+      const gl = canvas.getContext('webgl2');
+      return gl !== null;
+    } catch (e) {
+      return false;
+    }
+  })();
+
   return {
     isMobile,
     isTablet,
@@ -132,6 +157,8 @@ export function detectPlatform(): PlatformInfo {
     prefersReducedMotion,
     prefersDarkMode,
     isOnline,
+    supportsWebGL,
+    supportsWebGL2,
   };
 }
 

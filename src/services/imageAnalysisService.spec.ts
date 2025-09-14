@@ -267,6 +267,8 @@ describe('imageAnalysisService', () => {
       expect(result.success).toBe(true);
       expect(result.closestApproachToBermuda).not.toBeNull();
       
+      // Test closest approach properties when available
+      expect(result.closestApproachToBermuda).toBeDefined();
       if (result.closestApproachToBermuda) {
         expect(result.closestApproachToBermuda.distance).toBeGreaterThan(0);
         expect(result.closestApproachToBermuda.distance).toBeLessThan(2000); // Reasonable range

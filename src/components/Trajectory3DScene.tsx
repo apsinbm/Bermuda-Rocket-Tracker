@@ -10,6 +10,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Line, Text, Sphere } from '@react-three/drei';
 import * as THREE from 'three';
 import { ProcessedSimulationData, EnhancedTelemetryFrame, StageEvent } from '../services/flightClubApiService';
+import { PlatformInfo } from '../utils/platformUtils';
 
 interface Trajectory3DSceneProps {
   simulationData: ProcessedSimulationData;
@@ -17,6 +18,7 @@ interface Trajectory3DSceneProps {
   playbackTime: number;
   highlightedStage?: number | null;
   showDataOverlay?: boolean;
+  platform?: PlatformInfo;
 }
 
 // Earth and coordinates constants
@@ -680,9 +682,28 @@ const Trajectory3DScene: React.FC<Trajectory3DSceneProps> = ({
   viewMode,
   playbackTime,
   highlightedStage,
-  showDataOverlay
+  showDataOverlay,
+  platform
 }) => {
   const { enhancedTelemetry, stageEvents } = simulationData;
+
+  // Optimized OrbitControls configuration for mobile
+  const orbitConfig = useMemo(() => ({
+    enablePan: true,
+    enableZoom: true,
+    enableRotate: true,
+    maxDistance: 800,
+    minDistance: 150,
+    // Mobile-specific optimizations
+    enableDamping: platform?.isMobile ?? true, // Smoother on mobile
+    dampingFactor: platform?.isMobile ? 0.1 : 0.05, // More damping on mobile
+    rotateSpeed: platform?.isMobile ? 0.8 : 1.0, // Slower rotation on mobile
+    zoomSpeed: platform?.isMobile ? 0.8 : 1.0, // Slower zoom on mobile
+    panSpeed: platform?.isMobile ? 0.8 : 1.0, // Slower pan on mobile
+    touchRotateSpeed: platform?.supportsTouch ? 1.5 : 1.0, // Enhanced touch rotation
+    touchZoomSpeed: platform?.supportsTouch ? 1.5 : 1.0, // Enhanced touch zoom
+    touchPanSpeed: platform?.supportsTouch ? 1.5 : 1.0, // Enhanced touch pan
+  }), [platform]);
 
   // Add safety checks
   if (!simulationData || !enhancedTelemetry || enhancedTelemetry.length === 0) {
@@ -695,11 +716,7 @@ const Trajectory3DScene: React.FC<Trajectory3DSceneProps> = ({
         {/* Camera controls */}
         {viewMode === 'overview' && (
           <OrbitControls
-            enablePan={true}
-            enableZoom={true}
-            enableRotate={true}
-            maxDistance={800}
-            minDistance={150}
+            {...orbitConfig}
           />
         )}
         
@@ -724,11 +741,7 @@ const Trajectory3DScene: React.FC<Trajectory3DSceneProps> = ({
       {/* Camera controls (only for some view modes) */}
       {viewMode === 'overview' && (
         <OrbitControls
-          enablePan={true}
-          enableZoom={true}
-          enableRotate={true}
-          maxDistance={800}
-          minDistance={150}
+          {...orbitConfig}
         />
       )}
 

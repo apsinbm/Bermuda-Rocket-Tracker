@@ -138,3 +138,78 @@ select {
     padding: 8px;
   }
 }
+
+/* 3D/WebGL Canvas Mobile Optimizations */
+canvas {
+  /* Prevent context menu on touch */
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  
+  /* Prevent callout on touch */
+  -webkit-touch-callout: none;
+  
+  /* Optimize touch handling */
+  touch-action: none;
+  
+  /* GPU acceleration hints */
+  -webkit-transform: translateZ(0);
+  -moz-transform: translateZ(0);
+  -ms-transform: translateZ(0);
+  transform: translateZ(0);
+  
+  /* Performance optimizations */
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* Three.js Canvas specific optimizations */
+.r3f-canvas {
+  /* Prevent bounce/rubber band effect on iOS */
+  overflow: hidden;
+  position: relative;
+  
+  /* Ensure proper layer promotion */
+  will-change: transform;
+}
+
+/* Mobile 3D container optimizations */
+@media (hover: none) and (pointer: coarse) {
+  .mobile-3d-container {
+    /* Ensure proper rendering on mobile */
+    -webkit-transform: translate3d(0, 0, 0);
+    transform: translate3d(0, 0, 0);
+    
+    /* Optimize scrolling */
+    -webkit-overflow-scrolling: touch;
+    
+    /* Prevent text selection during touch interactions */
+    -webkit-user-select: none;
+    user-select: none;
+    
+    /* Optimize touch response */
+    touch-action: pan-x pan-y;
+  }
+  
+  /* Mobile-specific WebGL fallback */
+  .webgl-fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+    color: white;
+    text-align: center;
+    padding: 2rem;
+    border-radius: 8px;
+  }
+}
+
+/* High DPI canvas scaling */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  .mobile-canvas-container {
+    /* Ensure crisp rendering on retina displays */
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+  }
+}

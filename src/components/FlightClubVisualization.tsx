@@ -8,6 +8,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { LaunchWithVisibility } from '../types';
+import { detectPlatform } from '../utils/platformUtils';
 import { FlightClubApiService, ProcessedSimulationData, FlightClubMission } from '../services/flightClubApiService';
 import FlightClub2DVisualization from './FlightClub2DVisualization';
 import TelemetryGraphs from './TelemetryGraphs';
@@ -28,6 +29,30 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
   launch,
   darkMode = true
 }) => {
+  // Detect platform capabilities for mobile optimization
+  const platform = useMemo(() => detectPlatform(), []);
+  
+  // Optimized Canvas configuration for mobile/desktop
+  const canvasConfig = useMemo(() => ({
+    camera: { 
+      position: [0, 200, -300] as [number, number, number], 
+      fov: platform.isMobile ? 70 : 60 // Wider FOV on mobile for better visibility
+    },
+    gl: { 
+      antialias: platform.supportsWebGL2 && !platform.isMobile, // Disable AA on mobile for performance
+      alpha: false,
+      powerPreference: platform.isMobile ? 'default' : 'high-performance',
+      pixelRatio: platform.isMobile ? Math.min(window.devicePixelRatio, 2) : window.devicePixelRatio
+    },
+    performance: { 
+      min: platform.isMobile ? 0.3 : 0.5, // Lower performance threshold on mobile
+      debounce: platform.isMobile ? 200 : 100
+    },
+    style: {
+      touchAction: platform.supportsTouch ? 'none' : 'auto', // Prevent touch conflicts
+    } as React.CSSProperties
+  }), [platform]);
+  
   const [viewMode, setViewMode] = useState<ViewMode>('combined');
   const [view3DMode, setView3DMode] = useState<View3DMode>('overview');
   const [simulationData, setSimulationData] = useState<ProcessedSimulationData | null>(null);
@@ -380,9 +405,10 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
               <div className="h-96">
                 {simulationData ? (
                   <Canvas 
-                    camera={{ position: [0, 200, -300], fov: 60 }}
-                    gl={{ antialias: false, alpha: false }}
-                    performance={{ min: 0.5 }}
+                    camera={canvasConfig.camera}
+                    gl={canvasConfig.gl}
+                    performance={canvasConfig.performance}
+                    style={canvasConfig.style}
                   >
                     <Trajectory3DScene
                       simulationData={simulationData}
@@ -390,6 +416,7 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
                       playbackTime={playbackTime}
                       highlightedStage={highlightedStage}
                       showDataOverlay={true}
+                      platform={platform}
                     />
                   </Canvas>
                 ) : (
@@ -435,9 +462,10 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
             <div className="h-[600px]">
               {simulationData ? (
                 <Canvas 
-                  camera={{ position: [0, 200, -300], fov: 60 }}
-                  gl={{ antialias: false, alpha: false }}
-                  performance={{ min: 0.5 }}
+                  camera={canvasConfig.camera}
+                  gl={canvasConfig.gl}
+                  performance={canvasConfig.performance}
+                  style={canvasConfig.style}
                 >
                   <Trajectory3DScene
                     simulationData={simulationData}
@@ -445,6 +473,7 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
                     playbackTime={playbackTime}
                     highlightedStage={highlightedStage}
                     showDataOverlay={true}
+                    platform={platform}
                   />
                 </Canvas>
               ) : (
