@@ -186,7 +186,7 @@ const StageEventTimeline: React.FC<StageEventTimelineProps> = ({
       </div>
 
       {/* Events list */}
-      <div className="space-y-2 max-h-96 overflow-y-auto">
+      <div className="space-y-2">
         {enhancedEvents.map((event) => {
           const isActive = Math.abs(playbackTime - event.time) < 10;
           const isPassed = playbackTime > event.time;

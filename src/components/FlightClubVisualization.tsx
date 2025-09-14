@@ -66,6 +66,7 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
   
   // State management
   const [showLiveGuide, setShowLiveGuide] = useState(false);
+  const [scene3DReady, setScene3DReady] = useState(false);
 
   // Handle mission selection (now used for auto-selection)
   const handleMissionSelect = async (missionId: string) => {
@@ -92,6 +93,10 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
       
       console.log(`[FlightClub] Loaded ${simData.enhancedTelemetry.length} telemetry frames from manually selected mission`);
       
+      // Reset playback to show first frame immediately
+      setPlaybackTime(0);
+      setIsPlaying(false);
+      
     } catch (error) {
       console.error('[FlightClub] Failed to load manually selected mission:', error);
       setError(error instanceof Error ? error.message : 'Failed to load selected mission');
@@ -99,6 +104,11 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
       setLoading(false);
     }
   };
+
+  // Reset 3D scene ready state when loading new data
+  useEffect(() => {
+    setScene3DReady(false);
+  }, [loading]);
 
   // Load FlightClub data
   useEffect(() => {
@@ -180,6 +190,10 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
           
           console.log(`[FlightClub] Loaded ${simData.enhancedTelemetry.length} telemetry frames`);
           
+          // Reset playback to show first frame immediately
+          setPlaybackTime(0);
+          setIsPlaying(false);
+          
           // If we successfully loaded data, clear the development warning
           if (error === 'development-mode-warning') {
             setError(null);
@@ -197,14 +211,24 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
     loadFlightClubData();
   }, [launch.id, launch.name]);
 
-  // Playback control
+  // Playback control with race condition prevention
   const maxTime = useMemo(() => {
     if (!simulationData?.enhancedTelemetry.length) return 0;
     return Math.max(...simulationData.enhancedTelemetry.map(frame => frame.time));
   }, [simulationData]);
 
+  // Ensure playback starts at 0 when new data is loaded
   useEffect(() => {
-    if (!isPlaying || !maxTime) return;
+    if (simulationData?.enhancedTelemetry && simulationData.enhancedTelemetry.length > 0 && playbackTime === 0) {
+      // Force a re-render to show the first frame immediately
+      setPlaybackTime(0.001);
+      setTimeout(() => setPlaybackTime(0), 10);
+    }
+  }, [simulationData]);
+
+  useEffect(() => {
+    // Only allow playback if we have valid data and scene is ready
+    if (!isPlaying || !maxTime || !simulationData?.enhancedTelemetry?.length) return;
 
     const interval = setInterval(() => {
       setPlaybackTime(prev => {
@@ -218,7 +242,7 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
     }, 100); // Update every 100ms
 
     return () => clearInterval(interval);
-  }, [isPlaying, playbackSpeed, maxTime]);
+  }, [isPlaying, playbackSpeed, maxTime, simulationData]);
 
   // Format time display
   const formatTime = (seconds: number): string => {
@@ -227,9 +251,12 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
     return `T+${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
 
-  // Handle time selection from graphs
+  // Handle time selection from graphs with data validation
   const handleTimeSelect = (time: number) => {
-    setPlaybackTime(Math.max(0, Math.min(time, maxTime)));
+    if (!simulationData?.enhancedTelemetry?.length) return;
+    
+    const clampedTime = Math.max(0, Math.min(time, maxTime));
+    setPlaybackTime(clampedTime);
     setIsPlaying(false);
   };
 
@@ -288,7 +315,7 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
       {/* Header with mission info and controls */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold mb-1">FlightClub Trajectory Analysis</h2>
+          <h2 className="text-2xl font-bold mb-1">Flight Trajectory Analysis</h2>
           <div className={`text-sm ${themeClasses.textSecondary}`}>
             {flightClubMission?.description} • {simulationData.enhancedTelemetry.length} telemetry points
           </div>
@@ -324,14 +351,31 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
       <div className={`flex flex-col sm:flex-row items-center gap-4 p-4 ${themeClasses.card} border ${themeClasses.border} rounded-lg`}>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setIsPlaying(!isPlaying)}
-            className={`px-4 py-2 rounded ${themeClasses.buttonActive} text-white font-medium`}
+            onClick={() => {
+              if (!simulationData?.enhancedTelemetry?.length) return;
+              setIsPlaying(!isPlaying);
+            }}
+            disabled={!simulationData?.enhancedTelemetry?.length}
+            className={`px-4 py-2 rounded ${
+              !simulationData?.enhancedTelemetry?.length
+                ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
+                : `${themeClasses.buttonActive} text-white`
+            } font-medium transition-colors`}
           >
             {isPlaying ? '⏸️ Pause' : '▶️ Play'}
           </button>
           <button
-            onClick={() => setPlaybackTime(0)}
-            className={`px-3 py-2 rounded ${themeClasses.button} ${themeClasses.text}`}
+            onClick={() => {
+              if (!simulationData?.enhancedTelemetry?.length) return;
+              setPlaybackTime(0);
+              setIsPlaying(false);
+            }}
+            disabled={!simulationData?.enhancedTelemetry?.length}
+            className={`px-3 py-2 rounded ${
+              !simulationData?.enhancedTelemetry?.length
+                ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
+                : `${themeClasses.button} ${themeClasses.text}`
+            } transition-colors`}
           >
             ⏮️ Reset
           </button>
@@ -402,23 +446,51 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
                   <option value="top-down">Top Down</option>
                 </select>
               </div>
-              <div className="h-96">
+              <div className="h-96 relative">
                 {simulationData ? (
-                  <Canvas 
-                    camera={canvasConfig.camera}
-                    gl={canvasConfig.gl}
-                    performance={canvasConfig.performance}
-                    style={canvasConfig.style}
-                  >
-                    <Trajectory3DScene
-                      simulationData={simulationData}
-                      viewMode={view3DMode}
-                      playbackTime={playbackTime}
-                      highlightedStage={highlightedStage}
-                      showDataOverlay={true}
-                      platform={platform}
-                    />
-                  </Canvas>
+                  <>
+                    {/* Loading overlay for 3D scene */}
+                    {!scene3DReady && (
+                      <div className="absolute inset-0 z-10 flex items-center justify-center bg-black bg-opacity-50 rounded-lg">
+                        <div className="text-center text-white">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-2"></div>
+                          <div className="text-sm">Initializing 3D Scene...</div>
+                          <div className="text-xs opacity-75 mt-1">Loading textures and models</div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    <Canvas 
+                      camera={canvasConfig.camera}
+                      gl={canvasConfig.gl}
+                      performance={canvasConfig.performance}
+                      style={canvasConfig.style}
+                      onCreated={(state) => {
+                        // Canvas is created, set up faster ready detection
+                        const checkReady = () => {
+                          if (simulationData?.enhancedTelemetry?.length > 0) {
+                            setScene3DReady(true);
+                          } else {
+                            // If no data, still show the scene (Earth only)
+                            setTimeout(() => setScene3DReady(true), 800);
+                          }
+                        };
+                        
+                        // Check immediately and after a short delay
+                        setTimeout(checkReady, 500);
+                        setTimeout(checkReady, 1200);
+                      }}
+                    >
+                      <Trajectory3DScene
+                        simulationData={simulationData}
+                        viewMode={view3DMode}
+                        playbackTime={playbackTime}
+                        highlightedStage={highlightedStage}
+                        showDataOverlay={true}
+                        platform={platform}
+                      />
+                    </Canvas>
+                  </>
                 ) : (
                   <div className={`flex items-center justify-center h-full ${darkMode ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600'} rounded-lg`}>
                     <div className="text-center">
@@ -459,23 +531,52 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
                 <option value="top-down">Top Down</option>
               </select>
             </div>
-            <div className="h-[600px]">
+            <div className="h-[600px] relative">
               {simulationData ? (
-                <Canvas 
-                  camera={canvasConfig.camera}
-                  gl={canvasConfig.gl}
-                  performance={canvasConfig.performance}
-                  style={canvasConfig.style}
-                >
-                  <Trajectory3DScene
-                    simulationData={simulationData}
-                    viewMode={view3DMode}
-                    playbackTime={playbackTime}
-                    highlightedStage={highlightedStage}
-                    showDataOverlay={true}
-                    platform={platform}
-                  />
-                </Canvas>
+                <>
+                  {/* Loading overlay for 3D scene */}
+                  {!scene3DReady && (
+                    <div className="absolute inset-0 z-10 flex items-center justify-center bg-black bg-opacity-50 rounded-lg">
+                      <div className="text-center text-white">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+                        <div className="text-lg font-medium">Initializing 3D Scene...</div>
+                        <div className="text-sm opacity-75 mt-2">Loading Earth textures and trajectory data</div>
+                        <div className="text-xs opacity-50 mt-1">This may take a few moments</div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  <Canvas 
+                    camera={canvasConfig.camera}
+                    gl={canvasConfig.gl}
+                    performance={canvasConfig.performance}
+                    style={canvasConfig.style}
+                    onCreated={(state) => {
+                      // Canvas is created, set up ready detection
+                      const checkReady = () => {
+                        if (simulationData?.enhancedTelemetry?.length > 0) {
+                          setScene3DReady(true);
+                        } else {
+                          // If no data, still show the scene (Earth only)
+                          setTimeout(() => setScene3DReady(true), 1000);
+                        }
+                      };
+                      
+                      // Check after initialization delays
+                      setTimeout(checkReady, 800);
+                      setTimeout(checkReady, 1500);
+                    }}
+                  >
+                    <Trajectory3DScene
+                      simulationData={simulationData}
+                      viewMode={view3DMode}
+                      playbackTime={playbackTime}
+                      highlightedStage={highlightedStage}
+                      showDataOverlay={true}
+                      platform={platform}
+                    />
+                  </Canvas>
+                </>
               ) : (
                 <div className={`flex items-center justify-center h-full ${darkMode ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600'} rounded-lg`}>
                   <div className="text-center">
