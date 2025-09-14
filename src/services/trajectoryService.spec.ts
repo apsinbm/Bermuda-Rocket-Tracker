@@ -311,22 +311,22 @@ describe('trajectoryService', () => {
         // These patterns should be detected by the filename analysis
         const filename = testCase.url.split('/').pop()?.toLowerCase() || '';
         
-        if (testCase.expectedDirection === 'Northeast') {
-          const northeastPatterns = [
-            'northeast', 'north-east', 'ne-', '_ne_', '_ne.',
-            'rtls', 'north', 'fl-north', 'trajecoty-fl-north'
-          ];
-          
-          const hasNortheastPattern = northeastPatterns.some(pattern => 
-            filename.includes(pattern) || testCase.url.toLowerCase().includes(pattern)
-          );
-          
-          expect(hasNortheastPattern).toBe(true);
-        }
+        // Test Northeast pattern detection
+        const isNortheastDirection = testCase.expectedDirection === 'Northeast';
+        const northeastPatterns = [
+          'northeast', 'north-east', 'ne-', '_ne_', '_ne.',
+          'rtls', 'north', 'fl-north', 'trajecoty-fl-north'
+        ];
         
-        if (testCase.mission && testCase.mission.toLowerCase().includes('starlink')) {
-          expect(testCase.expectedDirection).toBe('Northeast');
-        }
+        const hasNortheastPattern = northeastPatterns.some(pattern => 
+          filename.includes(pattern) || testCase.url.toLowerCase().includes(pattern)
+        );
+        
+        expect(!isNortheastDirection || hasNortheastPattern).toBe(true);
+        
+        // Test Starlink mission direction
+        const isStarlinkMission = testCase.mission && testCase.mission.toLowerCase().includes('starlink');
+        expect(!isStarlinkMission || testCase.expectedDirection === 'Northeast').toBe(true);
       });
     });
   });

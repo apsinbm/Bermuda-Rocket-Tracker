@@ -5,7 +5,7 @@
  * Provides clear, actionable information about rocket launch visibility
  */
 
-import { EnhancedVisibilityData, VisibilityWindow } from '../types';
+import { EnhancedVisibilityData } from '../types';
 import { getBermudaTimeZone } from './bermudaTimeZone';
 
 export interface FormattedVisibilityOutput {
@@ -77,12 +77,13 @@ export class VisibilityFormatter {
       return `Visible: No - Launch not expected to be visible from Bermuda`;
     }
 
-    const likelihoodText = {
+    const likelihoodMap: Record<string, string> = {
       'high': 'Yes - Excellent visibility expected',
       'medium': 'Likely - Good chance of visibility',
       'low': 'Possibly - Limited visibility expected',
       'none': 'No - Not visible from Bermuda'
-    }[likelihood] || 'Unknown visibility';
+    };
+    const likelihoodText = likelihoodMap[likelihood] || 'Unknown visibility';
 
     const confidenceNote = confidence === 'high' ? ' (High confidence)' :
                            confidence === 'medium' ? ' (Moderate confidence)' :
@@ -172,7 +173,6 @@ export class VisibilityFormatter {
   private static formatSunPosition(solarConditions: EnhancedVisibilityData['solarConditions']): string {
     const elevation = solarConditions.sunElevation;
     const azimuth = solarConditions.sunAzimuth;
-    const phase = solarConditions.twilightPhase;
 
     // Describe sun position relative to horizon
     let positionDesc = '';
@@ -241,12 +241,13 @@ export class VisibilityFormatter {
     }
 
     const quality = enhancedData.validationStatus.dataQuality;
-    const qualityText = {
+    const qualityMap: Record<string, string> = {
       'excellent': '(Excellent accuracy)',
       'good': '(Good accuracy)',
       'fair': '(Fair accuracy)',
       'poor': '(Limited accuracy)'
-    }[quality] || '';
+    };
+    const qualityText = qualityMap[quality] || '';
 
     return `Data sources: ${sources.join(', ')} ${qualityText}`.trim();
   }
@@ -278,7 +279,7 @@ export class VisibilityFormatter {
     const directions = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE',
                        'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
     const index = Math.round(bearing / 22.5) % 16;
-    return directions[index];
+    return directions[index] || 'N';
   }
 
   /**

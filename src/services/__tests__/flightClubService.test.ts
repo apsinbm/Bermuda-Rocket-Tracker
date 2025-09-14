@@ -48,17 +48,31 @@ describe('Flight Club Service', () => {
     expect(typeof analysis.isVisible).toBe('boolean');
     expect(typeof analysis.totalVisibleFrames).toBe('number');
     
-    // Visibility logic consistency checks
-    if (analysis.isVisible) {
-      expect(analysis.totalVisibleFrames).toBeGreaterThan(0);
-    } else {
-      expect(analysis.totalVisibleFrames).toBe(0);
-    }
-    
     // Properties should exist regardless of visibility
     expect(analysis.firstVisible).toBeDefined();
     expect(analysis.lastVisible).toBeDefined();
     expect(analysis.closestApproach).toBeDefined();
+  });
+
+  test('analyzeVisibility should have consistent visible frame count when visible', () => {
+    const analysis = analyzeVisibility(mockTelemetry);
+    
+    // Only test the positive case to avoid conditional expects
+    const shouldHaveFrames = analysis.isVisible;
+    expect(shouldHaveFrames ? analysis.totalVisibleFrames > 0 : analysis.totalVisibleFrames === 0).toBe(true);
+  });
+
+  test('analyzeVisibility should have zero visible frames when not visible', () => {
+    // Create telemetry that definitely won't be visible (too far away)
+    const farAwayTelemetry: TelemetryFrame[] = [
+      { time: 0, lat: 60.0, lon: 60.0, alt: 50000 },
+      { time: 60, lat: 61.0, lon: 61.0, alt: 100000 }
+    ];
+    
+    const analysis = analyzeVisibility(farAwayTelemetry);
+    
+    expect(analysis.isVisible).toBe(false);
+    expect(analysis.totalVisibleFrames).toBe(0);
   });
 
   test('should handle empty telemetry gracefully', () => {

@@ -124,12 +124,13 @@ describe('trajectoryDataFlow integration', () => {
 
       const result = await calculateVisibility(STARLINK_GROUP_10_30);
       
-      if (result.trajectoryDirection) {
-        expect(['Northeast', 'East-Northeast']).toContain(result.trajectoryDirection);
-      }
-      if (result.bearing !== undefined) {
-        expect(typeof result.bearing).toBe('number');
-      }
+      // Test trajectory direction if defined
+      const hasTrajectoryDirection = result.trajectoryDirection !== undefined;
+      expect(!hasTrajectoryDirection || ['Northeast', 'East-Northeast'].includes(result.trajectoryDirection!)).toBe(true);
+      
+      // Test bearing if defined
+      const hasBearing = result.bearing !== undefined;
+      expect(!hasBearing || typeof result.bearing === 'number').toBe(true);
       expect(result.dataSource).toBeDefined();
       expect(['flightclub', 'calculated', 'estimated']).toContain(result.dataSource);
       // Real telemetry depends on successful Flight Club integration

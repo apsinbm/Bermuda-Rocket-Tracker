@@ -192,11 +192,23 @@ describe('Launch Data Service Integration Tests', () => {
       
       const enhancedVisibility = await calculateVisibility(testLaunch);
       
-      // Test factors structure when it exists
-      if (enhancedVisibility.factors) {
-        expect(enhancedVisibility.factors).toBeInstanceOf(Array);
-        expect(enhancedVisibility.factors.length).toBeGreaterThanOrEqual(0);
-      }
+      // Test factors structure - it should either be an array or undefined
+      expect(enhancedVisibility.factors === undefined || Array.isArray(enhancedVisibility.factors)).toBe(true);
+      
+      // Test factors length if they exist
+      const hasFactors = enhancedVisibility.factors !== undefined;
+      expect(!hasFactors || enhancedVisibility.factors!.length >= 0).toBe(true);
+    });
+
+    test('should have array type factors when factors are defined', async () => {
+      const launches = await launchDataService.getLaunches();
+      const testLaunch = launches[0];
+      
+      const enhancedVisibility = await calculateVisibility(testLaunch);
+      
+      // Only test array properties if factors are defined
+      const factors = enhancedVisibility.factors;
+      expect(factors === undefined || (Array.isArray(factors) && factors.length >= 0)).toBe(true);
     });
 
     test('should provide consistent visibility calculations', async () => {

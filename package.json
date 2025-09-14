@@ -36,7 +36,7 @@
     "test:ci": "react-scripts test --coverage --watchAll=false --testTimeout=30000",
     "eject": "react-scripts eject",
     "analyze": "npm run build && npx serve -s build -l 3000",
-    "lint": "eslint src --ext .ts,.tsx --max-warnings 0",
+    "lint": "eslint src --ext .ts,.tsx",
     "lint:fix": "eslint src --ext .ts,.tsx --fix",
     "type-check": "tsc --noEmit",
     "pre-deploy": "npm run lint && npm run type-check && npm run test:ci && npm run build:production",

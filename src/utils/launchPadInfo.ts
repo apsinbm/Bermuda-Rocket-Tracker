@@ -93,8 +93,8 @@ const LAUNCH_PAD_DETAILS: Record<string, LaunchPadDetails> = {
  */
 export function getLaunchPadDetails(padName: string, apiLocationData?: any): LaunchPadDetails {
   // Try exact match first
-  if (LAUNCH_PAD_DETAILS[padName]) {
-    return LAUNCH_PAD_DETAILS[padName];
+  if (Object.prototype.hasOwnProperty.call(LAUNCH_PAD_DETAILS, padName)) {
+    return LAUNCH_PAD_DETAILS[padName as keyof typeof LAUNCH_PAD_DETAILS];
   }
   
   // Try partial matches
@@ -103,8 +103,8 @@ export function getLaunchPadDetails(padName: string, apiLocationData?: any): Lau
     key.toLowerCase().includes(padName.toLowerCase())
   );
   
-  if (padKey) {
-    return LAUNCH_PAD_DETAILS[padKey];
+  if (padKey && Object.prototype.hasOwnProperty.call(LAUNCH_PAD_DETAILS, padKey)) {
+    return LAUNCH_PAD_DETAILS[padKey as keyof typeof LAUNCH_PAD_DETAILS];
   }
   
   // If API location data is available, use it instead of hardcoded fallback

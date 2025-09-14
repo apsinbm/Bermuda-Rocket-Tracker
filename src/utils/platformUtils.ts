@@ -56,7 +56,6 @@ export function detectPlatform(): PlatformInfo {
   }
 
   const userAgent = navigator.userAgent.toLowerCase();
-  const isApple = /mac|iphone|ipad|ipod/.test(userAgent);
   const isIOS = /iphone|ipad|ipod/.test(userAgent);
   const isAndroid = /android/.test(userAgent);
   
@@ -93,11 +92,11 @@ export function detectPlatform(): PlatformInfo {
   // Notch/Dynamic Island detection (rough approximation)
   const hasNotchOrDynamicIsland = isIOS && (
     // iPhone X family and newer
-    window.screen.width === 375 && window.screen.height === 812 || // iPhone X/XS/11 Pro
-    window.screen.width === 414 && window.screen.height === 896 || // iPhone XR/XS Max/11/11 Pro Max
-    window.screen.width === 390 && window.screen.height === 844 || // iPhone 12/12 Pro
-    window.screen.width === 428 && window.screen.height === 926 || // iPhone 12 Pro Max
-    window.screen.width === 375 && window.screen.height === 667 || // iPhone SE (3rd gen)
+    (window.screen.width === 375 && window.screen.height === 812) || // iPhone X/XS/11 Pro
+    (window.screen.width === 414 && window.screen.height === 896) || // iPhone XR/XS Max/11/11 Pro Max
+    (window.screen.width === 390 && window.screen.height === 844) || // iPhone 12/12 Pro
+    (window.screen.width === 428 && window.screen.height === 926) || // iPhone 12 Pro Max
+    (window.screen.width === 375 && window.screen.height === 667) || // iPhone SE (3rd gen)
     // Check for safe-area-inset support
     CSS.supports('padding', 'env(safe-area-inset-top)')
   );

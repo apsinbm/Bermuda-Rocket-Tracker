@@ -269,15 +269,16 @@ describe('imageAnalysisService', () => {
       
       // Test closest approach properties when available
       expect(result.closestApproachToBermuda).toBeDefined();
-      if (result.closestApproachToBermuda) {
-        expect(result.closestApproachToBermuda.distance).toBeGreaterThan(0);
-        expect(result.closestApproachToBermuda.distance).toBeLessThan(2000); // Reasonable range
-        expect(result.closestApproachToBermuda.bearing).toBeGreaterThanOrEqual(0);
-        expect(result.closestApproachToBermuda.bearing).toBeLessThan(360);
-        expect(result.closestApproachToBermuda.point).toBeDefined();
-        expect(result.closestApproachToBermuda.point.lat).toBeDefined();
-        expect(result.closestApproachToBermuda.point.lng).toBeDefined();
-      }
+      
+      // Test closest approach properties if defined
+      const hasClosestApproach = result.closestApproachToBermuda !== null;
+      expect(!hasClosestApproach || result.closestApproachToBermuda!.distance > 0).toBe(true);
+      expect(!hasClosestApproach || result.closestApproachToBermuda!.distance < 2000).toBe(true);
+      expect(!hasClosestApproach || result.closestApproachToBermuda!.bearing >= 0).toBe(true);
+      expect(!hasClosestApproach || result.closestApproachToBermuda!.bearing < 360).toBe(true);
+      expect(!hasClosestApproach || result.closestApproachToBermuda!.point !== undefined).toBe(true);
+      expect(!hasClosestApproach || result.closestApproachToBermuda!.point.lat !== undefined).toBe(true);
+      expect(!hasClosestApproach || result.closestApproachToBermuda!.point.lng !== undefined).toBe(true);
     });
   });
 
