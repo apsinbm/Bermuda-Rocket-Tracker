@@ -1,354 +1,610 @@
 /**
- * FlightClub.io API Integration Service
- * Provides authenticated access to real rocket trajectory data
+ * Flight Club API Service - Client Side
+ * 
+ * Interfaces with the secure Vercel proxy endpoints for Flight Club data
+ * Provides telemetry-driven visibility calculations
  */
 
-const FLIGHTCLUB_API_KEY = 'apitn_p43xs5ha3';
-const FLIGHTCLUB_BASE_URL = 'https://api.flightclub.io/v3';
-
-// Cache duration constants
-const MISSION_CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
-const TRAJECTORY_CACHE_DURATION = 60 * 60 * 1000; // 1 hour
-
+// Types
 export interface FlightClubMission {
   id: string;
   description: string;
-  startDateTime: string; // ISO date string
+  startDateTime: string;
   company: {
     id: string;
     description: string;
   };
   display: boolean;
   flightClubSimId: string;
-  launchLibraryId?: string; // Key field for matching with Launch Library 2
+  launchLibraryId?: string;
   vehicle: {
     description: string;
   };
-  sequences?: unknown[];
-  landingZones?: unknown[];
 }
 
-export interface FlightClubTelemetryFrame {
+export interface EnhancedTelemetryFrame {
   time: number; // seconds from liftoff
   latitude: number;
   longitude: number;
   altitude: number; // meters
   speed: number; // m/s
-}
-
-export interface FlightClubTrajectoryData {
-  missionId: string;
-  simulationId: string;
-  launchLibraryId?: string;
-  description: string;
-  company: string;
-  vehicle: string;
-  stages: Array<{
-    stageNumber: number;
-    telemetry: FlightClubTelemetryFrame[];
-  }>;
-}
-
-export interface MissionCache {
-  data: FlightClubMission[];
-  lastFetch: number;
-  expiresAt: number;
-}
-
-export interface TrajectoryCache {
-  [missionId: string]: {
-    data: FlightClubTrajectoryData;
-    lastFetch: number;
-    expiresAt: number;
+  distanceFromBermuda: number; // km
+  bearingFromBermuda: number; // degrees
+  aboveHorizon: boolean;
+  elevationAngle: number; // degrees above horizon
+  stageNumber: number;
+  velocityVector?: {
+    magnitude: number; // km/s
+    direction: number; // degrees
   };
 }
 
-class FlightClubApiService {
-  private missionCache: MissionCache | null = null;
-  private trajectoryCache: TrajectoryCache = {};
+export interface VisibilitySummary {
+  firstVisible: number | null; // T+ seconds
+  lastVisible: number | null; // T+ seconds  
+  peakVisibility: number | null; // T+ seconds (closest approach)
+  totalDuration: number; // seconds
+  closestApproach: {
+    distance: number; // km
+    bearing: number; // degrees
+    time: number; // T+ seconds
+  };
+  visibleFrameCount: number;
+}
 
+export interface StageEvent {
+  time: number; // T+ seconds
+  event: string; // 'MECO', 'Stage Sep', 'SECO', etc.
+  stageNumber: number;
+  description?: string;
+  engineType?: 'Merlin' | 'MVac' | 'Unknown'; // Engine type for specific event tracking
+}
+
+export interface ProcessedSimulationData {
+  missionId: string;
+  enhancedTelemetry: EnhancedTelemetryFrame[];
+  visibilitySummary: VisibilitySummary;
+  stageEvents: StageEvent[];
+  lastUpdated: string;
+  cached: boolean;
+  warning?: string;
+}
+
+export interface MissionsResponse {
+  missions: FlightClubMission[];
+  lastUpdated: string;
+  cached: boolean;
+  warning?: string;
+}
+
+// Service class
+export class FlightClubApiService {
+  private static readonly BASE_URL = '/api/flightclub';
+  // SECURITY: Removed hardcoded API key - use proxy in all environments
+  private static readonly DEV_FALLBACK_API_KEY = null;
+  
   /**
-   * Make authenticated request to FlightClub API
+   * Demo/Mock mode for when API is unavailable
    */
-  private async makeRequest<T>(endpoint: string): Promise<T> {
-    const url = `${FLIGHTCLUB_BASE_URL}${endpoint}`;
+  private static DEMO_MODE = false;
+  
+  /**
+   * Sample FlightClub mission for demonstration
+   */
+  private static DEMO_MISSION: FlightClubMission = {
+    id: 'demo-starlink-mission',
+    description: 'Starlink Group Demo Mission',
+    startDateTime: new Date().toISOString(),
+    company: {
+      id: 'spacex',
+      description: 'SpaceX'
+    },
+    display: true,
+    flightClubSimId: 'demo-sim-001',
+    launchLibraryId: 'demo-launch-001',
+    vehicle: {
+      description: 'Falcon 9 Block 5'
+    }
+  };
+  
+  /**
+   * Generate sample telemetry data for demo mode
+   */
+  private static generateDemoTelemetry(): EnhancedTelemetryFrame[] {
+    const frames: EnhancedTelemetryFrame[] = [];
+    const CAPE_LAT = 28.4158;
+    const CAPE_LNG = -80.6081;
     
-    
-    try {
-      const response = await fetch(url, {
-        headers: {
-          'X-Api-Key': FLIGHTCLUB_API_KEY,
-          'Accept': 'application/json',
-          'User-Agent': 'BermudaRocketTracker/1.0'
+    // Generate trajectory from Cape Canaveral to northeast
+    for (let t = 0; t <= 600; t += 10) { // 10 minutes of flight
+      const progress = t / 600;
+      
+      // Realistic Falcon 9 altitude model (same as trajectoryService.ts)
+      let alt: number;
+      let velocity: number; // km/s
+      
+      if (t <= 162) {
+        // First stage burn: 0 to ~2.4 km/s, 0 to ~80km altitude
+        velocity = (t / 162) * 2.4;
+        alt = Math.pow(t / 162, 1.8) * 80000; // Non-linear altitude gain
+      } else if (t <= 165) {
+        // Stage separation: maintain velocity, slight altitude gain
+        velocity = 2.4;
+        alt = 80000 + (t - 162) * 1000; // +3km during separation
+      } else if (t <= 540) {
+        // Second stage burn: 2.4 to ~7.8 km/s, 80km to ~200km
+        const secondStageProgress = (t - 165) / (540 - 165);
+        velocity = 2.4 + secondStageProgress * 5.4; // Reach orbital velocity
+        alt = 80000 + Math.pow(secondStageProgress, 1.2) * 120000; // Reach ~200km
+      } else {
+        // Coasting: maintain orbital velocity and altitude
+        velocity = 7.8;
+        alt = 200000 + (t - 540) * 100; // Slight altitude increase
+      }
+      
+      // Simulate rocket trajectory (northeast from Cape Canaveral)
+      const lat = CAPE_LAT + progress * 15; // Move northeast
+      const lng = CAPE_LNG + progress * 10;
+      
+      // Calculate distance and bearing from Bermuda
+      const distance = this.calculateDistance(32.3078, -64.7505, lat, lng);
+      const bearing = this.calculateBearing(32.3078, -64.7505, lat, lng);
+      const elevation = this.calculateElevationAngle(distance, alt);
+      
+      frames.push({
+        time: t,
+        latitude: lat,
+        longitude: lng,
+        altitude: alt,
+        speed: velocity * 1000, // Convert km/s to m/s
+        distanceFromBermuda: distance,
+        bearingFromBermuda: bearing,
+        aboveHorizon: elevation > 0,
+        elevationAngle: elevation,
+        stageNumber: t < 165 ? 1 : 2, // Stage 1 until separation at T+165s
+        velocityVector: {
+          magnitude: velocity, // km/s (realistic Falcon 9 velocity)
+          direction: 45 // Northeast
         }
       });
+    }
+    
+    return frames;
+  }
+  
+  /**
+   * Helper functions for demo telemetry generation
+   */
+  private static calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+    const R = 6371; // Earth's radius in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  }
+  
+  private static calculateBearing(lat1: number, lng1: number, lat2: number, lng2: number): number {
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const lat1Rad = lat1 * Math.PI / 180;
+    const lat2Rad = lat2 * Math.PI / 180;
+    const y = Math.sin(dLng) * Math.cos(lat2Rad);
+    const x = Math.cos(lat1Rad) * Math.sin(lat2Rad) - Math.sin(lat1Rad) * Math.cos(lat2Rad) * Math.cos(dLng);
+    const bearing = Math.atan2(y, x) * 180 / Math.PI;
+    return (bearing + 360) % 360;
+  }
+  
+  private static calculateElevationAngle(distance: number, altitude: number): number {
+    const R = 6371; // Earth radius in km
+    const earthCurvature = (distance * distance) / (2 * R);
+    const apparentAltitude = altitude / 1000 - earthCurvature;
+    const elevationRadians = Math.atan2(apparentAltitude, distance);
+    return elevationRadians * 180 / Math.PI;
+  }
+  
+  /**
+   * SECURITY: Always use proxy - removed direct API access
+   * In development, ensure you run 'vercel dev' instead of 'npm start'
+   */
 
-      if (!response.ok) {
-        throw new Error(`FlightClub API error: ${response.status} ${response.statusText}`);
-      }
+  // SECURITY: Removed direct API access - always use secure proxy
 
-      const data = await response.json();
-      return data as T;
+  // SECURITY: Removed direct simulation API access - always use secure proxy
+
+  /**
+   * Enable demo mode for development/testing
+   */
+  static enableDemoMode(enable: boolean = true) {
+    this.DEMO_MODE = enable;
+    console.log(`[FlightClub] Demo mode ${enable ? 'enabled' : 'disabled'}`);
+  }
+
+  /**
+   * Fetch all available missions from Flight Club
+   */
+  static async getMissions(): Promise<MissionsResponse> {
+    // Check if in demo mode
+    if (this.DEMO_MODE) {
+      console.log('[FlightClub] Using demo mode - returning sample missions');
+      return {
+        missions: [this.DEMO_MISSION],
+        lastUpdated: new Date().toISOString(),
+        cached: false,
+        warning: 'Demo mode active - using sample data'
+      };
+    }
+    
+    try {
+      const response = await fetch(`${this.BASE_URL}/missions`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json'
+        }
+      });
       
+      if (!response.ok) {
+        // Auto-enable demo mode if API is unavailable
+        console.warn(`[FlightClub] API unavailable (${response.status}), enabling demo mode`);
+        this.enableDemoMode(true);
+        return this.getMissions(); // Recursive call with demo mode
+      }
+      
+      const data = await response.json();
+      console.log(`[FlightClub] Fetched ${data.missions?.length || 0} missions (cached: ${data.cached})`);
+      
+      return data;
     } catch (error) {
-      console.error(`[FlightClub API] Failed to fetch ${endpoint}:`, error);
+      console.error('[FlightClub] Failed to fetch missions:', error);
+      console.warn('[FlightClub] Falling back to demo mode');
+      this.enableDemoMode(true);
+      return this.getMissions(); // Recursive call with demo mode
+    }
+  }
+  
+  /**
+   * Fetch detailed simulation data for a specific mission with caching
+   */
+  static async getSimulationData(missionId: string, launchId?: string): Promise<ProcessedSimulationData> {
+    if (!missionId) {
+      throw new Error('Mission ID is required');
+    }
+    
+    // Check if in demo mode or if this is the demo mission
+    if (this.DEMO_MODE || missionId === 'demo-starlink-mission') {
+      console.log('[FlightClub] Using demo mode - generating sample simulation data');
+      const demoTelemetry = this.generateDemoTelemetry();
+      const visibleFrames = demoTelemetry.filter(f => f.aboveHorizon);
+      const closestFrame = demoTelemetry.reduce((closest, current) => 
+        current.distanceFromBermuda < closest.distanceFromBermuda ? current : closest
+      );
+      
+      return {
+        missionId,
+        enhancedTelemetry: demoTelemetry,
+        visibilitySummary: {
+          firstVisible: visibleFrames[0]?.time || null,
+          lastVisible: visibleFrames[visibleFrames.length - 1]?.time || null,
+          peakVisibility: closestFrame.time,
+          totalDuration: visibleFrames.length * 10, // 10 second intervals
+          closestApproach: {
+            distance: closestFrame.distanceFromBermuda,
+            bearing: closestFrame.bearingFromBermuda,
+            time: closestFrame.time
+          },
+          visibleFrameCount: visibleFrames.length
+        },
+        stageEvents: [
+          { time: 0, event: 'Liftoff', stageNumber: 1, description: 'Mission start' },
+          { time: 180, event: 'MECO-1', stageNumber: 1, engineType: 'Merlin' },
+          { time: 185, event: 'Stage Sep', stageNumber: 1 },
+          { time: 195, event: 'SES-1', stageNumber: 2, engineType: 'MVac' },
+          { time: 520, event: 'SECO-1', stageNumber: 2, engineType: 'MVac' }
+        ],
+        lastUpdated: new Date().toISOString(),
+        cached: false,
+        warning: 'Demo mode active - using simulated trajectory data'
+      };
+    }
+    
+    // Try to get from cache first
+    if (launchId) {
+      try {
+        const { indexedDBCache } = await import('./indexedDBCache');
+        const cachedData = await indexedDBCache.getFlightClubData(launchId, missionId);
+        if (cachedData) {
+          console.log(`[FlightClub] Using cached simulation data for ${missionId}`);
+          return cachedData;
+        }
+      } catch (cacheError) {
+        console.warn('[FlightClub] Cache read failed, fetching from API:', cacheError);
+      }
+    }
+    
+    try {
+      console.log(`[FlightClub] Attempting to fetch simulation data for missionId: ${missionId}`);
+      const response = await fetch(`${this.BASE_URL}/simulation/${encodeURIComponent(missionId)}`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        const errorMessage = `API request failed: ${response.status} ${response.statusText}`;
+        console.warn(`[FlightClub] ${errorMessage} for missionId: ${missionId}`);
+        
+        if (response.status === 404) {
+          throw new Error(`Mission not found or no simulation data available (ID: ${missionId})`);
+        }
+        throw new Error(errorMessage);
+      }
+      
+      const data = await response.json();
+      
+      // Cache the data if launchId is provided
+      if (launchId && data) {
+        try {
+          const { indexedDBCache } = await import('./indexedDBCache');
+          await indexedDBCache.cacheFlightClubData(launchId, missionId, data);
+          console.log(`[FlightClub] Cached simulation data for ${missionId}`);
+        } catch (cacheError) {
+          console.warn('[FlightClub] Cache write failed:', cacheError);
+        }
+      }
+      
+      // Log successful fetch
+      console.log(`[FlightClub] ✓ Successfully fetched simulation for ${missionId}: ${data.enhancedTelemetry?.length || 0} frames, ${data.visibilitySummary?.visibleFrameCount || 0} visible`);
+      
+      return data;
+    } catch (error) {
+      console.error(`[FlightClub] ✗ Failed to fetch simulation for ${missionId}:`, error);
       throw error;
     }
   }
+  
+  /**
+   * Manual mission mappings for common name mismatches
+   */
+  private static MISSION_MAPPINGS: Record<string, string> = {
+    // SpaceX Starlink patterns
+    'starlink group': 'starlink',
+    'starlink mission': 'starlink',
+    'starship ils-1': 'starship ils1',
+    'crew-9': 'crew 9',
+    'crew-10': 'crew 10',
+    // Europa Clipper patterns
+    'europa clipper': 'europa clipper mission',
+    // Add more mappings as needed
+  };
 
   /**
-   * Fetch all available missions from FlightClub
+   * Normalize mission name for better matching
    */
-  async getMissions(forceRefresh: boolean = false): Promise<FlightClubMission[]> {
-    // Check cache first
-    if (!forceRefresh && this.missionCache && Date.now() < this.missionCache.expiresAt) {
-      return this.missionCache.data;
-    }
+  private static normalizeMissionName(name: string): string {
+    return name
+      .toLowerCase()
+      .replace(/[\s\-_]+/g, ' ')  // Normalize spaces/dashes/underscores
+      .replace(/group\s+\d+[-\s]*\d+/, 'group')  // "Group 10-6" → "Group"
+      .replace(/mission\s*\d*/, '')  // Remove "Mission" suffix
+      .replace(/\s+/g, ' ')  // Normalize multiple spaces
+      .trim();
+  }
 
+  /**
+   * Check if names match using SpaceX-specific patterns
+   */
+  private static isSpaceXMatch(launchName: string, missionName: string): boolean {
+    const launch = this.normalizeMissionName(launchName);
+    const mission = this.normalizeMissionName(missionName);
+    
+    // Check manual mappings first
+    for (const [pattern, replacement] of Object.entries(this.MISSION_MAPPINGS)) {
+      if (launch.includes(pattern)) {
+        return mission.includes(replacement);
+      }
+    }
+    
+    // Starlink group matching
+    if (launch.includes('starlink') && mission.includes('starlink')) {
+      return true; // All Starlink missions are similar enough
+    }
+    
+    // Crew mission matching
+    const crewMatch = launch.match(/crew[-\s]*(\d+)/i);
+    if (crewMatch) {
+      const crewNumber = crewMatch[1];
+      return mission.includes(`crew ${crewNumber}`) || mission.includes(`crew-${crewNumber}`);
+    }
+    
+    return false;
+  }
+
+  /**
+   * Match a Launch Library launch with Flight Club mission
+   */
+  static async findMissionForLaunch(launchId: string, launchName: string): Promise<FlightClubMission | null> {
     try {
-      const missions = await this.makeRequest<FlightClubMission[]>('/mission/projected');
+      const missionsResponse = await this.getMissions();
+      const missions = missionsResponse.missions;
       
-      // Update cache
-      this.missionCache = {
-        data: missions,
-        lastFetch: Date.now(),
-        expiresAt: Date.now() + MISSION_CACHE_DURATION
+      // In demo mode, always return demo mission for SpaceX launches
+      if (this.DEMO_MODE && launchName.toLowerCase().includes('starlink')) {
+        console.log(`[FlightClub] Demo mode: returning demo mission for ${launchName}`);
+        return this.DEMO_MISSION;
+      }
+      
+      console.log(`[FlightClub] Searching for mission matching: "${launchName}" (ID: ${launchId})`);
+      console.log(`[FlightClub] Available missions: ${missions.length} ${missionsResponse.cached ? '(cached)' : '(fresh)'}`);
+      
+      // First try to match by Launch Library ID
+      const byId = missions.find(m => m.launchLibraryId === launchId);
+      if (byId) {
+        console.log(`[FlightClub] ✓ Matched ${launchName} by Launch Library ID: ${byId.id} - ${byId.description}`);
+        return byId;
+      }
+      
+      // Then try to match by exact name
+      const launchNameLower = launchName.toLowerCase();
+      const byExactName = missions.find(m => {
+        const missionName = m.description.toLowerCase();
+        return missionName === launchNameLower;
+      });
+      
+      if (byExactName) {
+        console.log(`[FlightClub] ✓ Matched ${launchName} by exact name: ${byExactName.id} - ${byExactName.description}`);
+        return byExactName;
+      }
+      
+      // Try partial name matching (both ways)
+      const byPartialName = missions.find(m => {
+        const missionName = m.description.toLowerCase();
+        return missionName.includes(launchNameLower) || launchNameLower.includes(missionName);
+      });
+      
+      if (byPartialName) {
+        console.log(`[FlightClub] ✓ Matched ${launchName} by partial name: ${byPartialName.id} - ${byPartialName.description}`);
+        return byPartialName;
+      }
+      
+      // Try SpaceX-specific matching patterns
+      const bySpaceXMatch = missions.find(m => this.isSpaceXMatch(launchName, m.description));
+      
+      if (bySpaceXMatch) {
+        console.log(`[FlightClub] ✓ Matched ${launchName} by SpaceX pattern: ${bySpaceXMatch.id} - ${bySpaceXMatch.description}`);
+        return bySpaceXMatch;
+      }
+      
+      // Try word-based matching for complex names (fallback)
+      const launchWords = launchNameLower.split(/[\s\-_]+/).filter(w => w.length > 2);
+      const byWordMatch = missions.find(m => {
+        const missionWords = m.description.toLowerCase().split(/[\s\-_]+/).filter(w => w.length > 2);
+        return launchWords.some(lw => missionWords.some(mw => lw.includes(mw) || mw.includes(lw)));
+      });
+      
+      if (byWordMatch) {
+        console.log(`[FlightClub] ✓ Matched ${launchName} by word similarity: ${byWordMatch.id} - ${byWordMatch.description}`);
+        return byWordMatch;
+      }
+      
+      // Log some example missions for debugging
+      const recentMissions = missions.slice(0, 10).map(m => `${m.id}: ${m.description}`);
+      console.log(`[FlightClub] ✗ No match found for "${launchName}". Recent missions:`, recentMissions);
+      
+      return null;
+      
+    } catch (error) {
+      console.error(`[FlightClub] Error matching launch ${launchName}:`, error);
+      return null;
+    }
+  }
+  
+  /**
+   * Get enhanced visibility data for a launch
+   */
+  static async getEnhancedVisibilityData(missionId: string): Promise<{
+    hasData: boolean;
+    visibilitySummary: VisibilitySummary;
+    telemetryFrames: EnhancedTelemetryFrame[];
+    stageEvents: StageEvent[];
+  }> {
+    try {
+      const simulationData = await this.getSimulationData(missionId);
+      
+      return {
+        hasData: true,
+        visibilitySummary: simulationData.visibilitySummary,
+        telemetryFrames: simulationData.enhancedTelemetry,
+        stageEvents: simulationData.stageEvents
       };
-
-      return missions;
       
     } catch (error) {
-      // Return cached data if available on error
-      if (this.missionCache) {
-        return this.missionCache.data;
-      }
+      console.error(`[FlightClub] No enhanced data for mission ${missionId}:`, error);
       
-      console.error('[FlightClub API] No cached missions available');
-      return [];
+      return {
+        hasData: false,
+        visibilitySummary: {
+          firstVisible: null,
+          lastVisible: null,
+          peakVisibility: null,
+          totalDuration: 0,
+          closestApproach: { distance: 0, bearing: 0, time: 0 },
+          visibleFrameCount: 0
+        },
+        telemetryFrames: [],
+        stageEvents: []
+      };
     }
   }
-
+  
   /**
-   * Fetch trajectory data for a specific mission
+   * Utility: Convert bearing to compass direction
    */
-  async getTrajectoryData(missionId: string, forceRefresh: boolean = false): Promise<FlightClubTrajectoryData | null> {
-    // Check cache first
-    const cached = this.trajectoryCache[missionId];
-    if (!forceRefresh && cached && Date.now() < cached.expiresAt) {
-      return cached.data;
-    }
-
-    try {
-      const trajectory = await this.makeRequest<FlightClubTrajectoryData>(`/simulation/lite?missionId=${missionId}`);
-      
-      // Validate trajectory data
-      if (this.isValidTrajectoryData(trajectory)) {
-        // Update cache
-        this.trajectoryCache[missionId] = {
-          data: trajectory,
-          lastFetch: Date.now(),
-          expiresAt: Date.now() + TRAJECTORY_CACHE_DURATION
-        };
-
-        return trajectory;
-      } else {
-        console.warn(`[FlightClub API] Invalid trajectory data for mission ${missionId}`);
-        return null;
-      }
-      
-    } catch (error) {
-      // Return cached data if available on error
-      if (cached) {
-        return cached.data;
-      }
-      
-      console.error(`[FlightClub API] Failed to get trajectory for mission ${missionId}:`, error);
-      return null;
-    }
+  static bearingToCompass(bearing: number): string {
+    const directions = [
+      'North', 'NNE', 'NE', 'ENE', 'East', 'ESE', 'SE', 'SSE',
+      'South', 'SSW', 'SW', 'WSW', 'West', 'WNW', 'NW', 'NNW'
+    ];
+    const index = Math.round(bearing / 22.5) % 16;
+    return directions[index];
   }
-
+  
   /**
-   * Find missions by Launch Library 2 ID
+   * Utility: Format time from T+ seconds to readable format
    */
-  async findMissionByLaunchLibraryId(launchLibraryId: string): Promise<FlightClubMission | null> {
-    try {
-      const missions = await this.getMissions();
-      const match = missions.find(mission => mission.launchLibraryId === launchLibraryId);
-      
-      if (match) {
-        return match;
-      }
-      
-      return null;
-      
-    } catch (error) {
-      console.error(`[FlightClub API] Error finding mission by LL2 ID ${launchLibraryId}:`, error);
-      return null;
-    }
+  static formatTplusTime(seconds: number): string {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = Math.round(seconds % 60);
+    return `T+${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   }
-
+  
   /**
-   * Search missions by name and company (fuzzy matching)
+   * Utility: Generate viewing instructions from telemetry
    */
-  async searchMissionsByName(missionName: string, company?: string, launchDate?: string): Promise<FlightClubMission[]> {
-    try {
-      const missions = await this.getMissions();
-      const searchName = missionName.toLowerCase();
-      const searchCompany = company?.toLowerCase();
-      
-      const matches = missions.filter(mission => {
-        const missionDesc = mission.description.toLowerCase();
-        const missionCompany = mission.company.description.toLowerCase();
-        
-        // Check name similarity
-        const nameMatch = missionDesc.includes(searchName) || 
-                         this.calculateSimilarity(missionDesc, searchName) > 0.7;
-        
-        // Check company match if provided
-        const companyMatch = !searchCompany || missionCompany.includes(searchCompany);
-        
-        // Check date proximity if provided (within 7 days)
-        let dateMatch = true;
-        if (launchDate) {
-          const missionDate = new Date(mission.startDateTime);
-          const targetDate = new Date(launchDate);
-          const timeDiff = Math.abs(missionDate.getTime() - targetDate.getTime());
-          const daysDiff = timeDiff / (1000 * 60 * 60 * 24);
-          dateMatch = daysDiff <= 7;
-        }
-        
-        return nameMatch && companyMatch && dateMatch;
-      });
-
-      return matches;
-      
-    } catch (error) {
-      console.error(`[FlightClub API] Error searching missions by name:`, error);
-      return [];
-    }
-  }
-
-  /**
-   * Get recent missions (within last 30 days and next 90 days)
-   */
-  async getRecentMissions(): Promise<FlightClubMission[]> {
-    try {
-      const missions = await this.getMissions();
-      const now = new Date();
-      const thirtyDaysAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
-      const ninetyDaysFromNow = new Date(now.getTime() + (90 * 24 * 60 * 60 * 1000));
-      
-      const recentMissions = missions.filter(mission => {
-        const missionDate = new Date(mission.startDateTime);
-        return missionDate >= thirtyDaysAgo && missionDate <= ninetyDaysFromNow;
-      });
-
-      return recentMissions;
-      
-    } catch (error) {
-      console.error('[FlightClub API] Error getting recent missions:', error);
-      return [];
-    }
-  }
-
-  /**
-   * Validate trajectory data integrity
-   */
-  private isValidTrajectoryData(trajectory: FlightClubTrajectoryData): boolean {
-    if (!trajectory.stages || trajectory.stages.length === 0) {
-      return false;
-    }
-
-    // Check if any stage has telemetry data
-    const hasValidTelemetry = trajectory.stages.some(stage => 
-      stage.telemetry && stage.telemetry.length > 0
-    );
-
-    if (!hasValidTelemetry) {
-      return false;
-    }
-
-    // Validate first few telemetry points
-    const firstStage = trajectory.stages.find(stage => stage.telemetry && stage.telemetry.length > 0);
-    if (firstStage) {
-      const firstFrame = firstStage.telemetry[0];
-      
-      // Check if coordinates are reasonable (should be near Florida for our use case)
-      const lat = firstFrame.latitude;
-      const lon = firstFrame.longitude;
-      
-      // Florida is roughly 25-31°N, 80-87°W
-      const nearFlorida = lat >= 24 && lat <= 32 && lon >= -88 && lon <= -79;
-      
-      if (!nearFlorida) {
-        console.warn(`[FlightClub API] Trajectory starts outside Florida area: ${lat}, ${lon}`);
-        // Still return true - might be a valid launch from other locations
-      }
-    }
-
-    return true;
-  }
-
-  /**
-   * Calculate string similarity using simple algorithm
-   */
-  private calculateSimilarity(str1: string, str2: string): number {
-    const longer = str1.length > str2.length ? str1 : str2;
-    const shorter = str1.length > str2.length ? str2 : str1;
+  static generateViewingInstructions(simulationData: ProcessedSimulationData): {
+    initialDirection: string;
+    peakDirection: string;
+    trackingPath: string;
+    optimalViewingTime: string;
+    instructions: string;
+  } {
+    const { visibilitySummary, enhancedTelemetry } = simulationData;
     
-    if (longer.length === 0) return 1.0;
-    
-    const editDistance = this.levenshteinDistance(longer, shorter);
-    return (longer.length - editDistance) / longer.length;
-  }
-
-  /**
-   * Calculate Levenshtein distance between two strings
-   */
-  private levenshteinDistance(str1: string, str2: string): number {
-    const matrix = Array(str2.length + 1).fill(null).map(() => 
-      Array(str1.length + 1).fill(null)
-    );
-
-    for (let i = 0; i <= str1.length; i++) matrix[0][i] = i;
-    for (let j = 0; j <= str2.length; j++) matrix[j][0] = j;
-
-    for (let j = 1; j <= str2.length; j++) {
-      for (let i = 1; i <= str1.length; i++) {
-        const substitutionCost = str1[i - 1] === str2[j - 1] ? 0 : 1;
-        matrix[j][i] = Math.min(
-          matrix[j][i - 1] + 1, // insertion
-          matrix[j - 1][i] + 1, // deletion
-          matrix[j - 1][i - 1] + substitutionCost // substitution
-        );
-      }
+    if (!visibilitySummary.firstVisible) {
+      return {
+        initialDirection: 'Not visible',
+        peakDirection: 'Not visible',
+        trackingPath: 'Not visible from Bermuda',
+        optimalViewingTime: 'Not applicable',
+        instructions: 'This launch will not be visible from Bermuda due to trajectory path and Earth\'s curvature.'
+      };
     }
-
-    return matrix[str2.length][str1.length];
-  }
-
-  /**
-   * Clear all caches
-   */
-  clearCache(): void {
-    this.missionCache = null;
-    this.trajectoryCache = {};
-  }
-
-  /**
-   * Get cache status for debugging
-   */
-  getCacheStatus(): { missions: boolean; trajectories: number } {
-    const missionsValid = this.missionCache && Date.now() < this.missionCache.expiresAt;
-    const validTrajectories = Object.values(this.trajectoryCache)
-      .filter(cache => Date.now() < cache.expiresAt).length;
-
+    
+    // Find key telemetry points
+    const firstVisibleFrame = enhancedTelemetry.find(f => f.time >= visibilitySummary.firstVisible!);
+    const peakFrame = enhancedTelemetry.find(f => f.time >= visibilitySummary.peakVisibility!);
+    
+    const initialDirection = firstVisibleFrame ? this.bearingToCompass(firstVisibleFrame.bearingFromBermuda) : 'Unknown';
+    const peakDirection = peakFrame ? this.bearingToCompass(peakFrame.bearingFromBermuda) : 'Unknown';
+    
+    // Create tracking path
+    const trackingPath = initialDirection === peakDirection 
+      ? `Remains in ${initialDirection}`
+      : `${initialDirection} → ${peakDirection}`;
+    
+    const optimalViewingTime = peakFrame 
+      ? `${this.formatTplusTime(peakFrame.time)} (${Math.round(peakFrame.elevationAngle)}° elevation)`
+      : 'Unknown';
+    
+    const instructions = `Start looking ${initialDirection.toLowerCase()} at ${this.formatTplusTime(visibilitySummary.firstVisible!)}. Peak visibility at ${optimalViewingTime}, distance ${Math.round(visibilitySummary.closestApproach.distance)}km. Track ${trackingPath.toLowerCase()} until ${this.formatTplusTime(visibilitySummary.lastVisible!)}.`;
+    
     return {
-      missions: !!missionsValid,
-      trajectories: validTrajectories
+      initialDirection,
+      peakDirection,
+      trackingPath,
+      optimalViewingTime,
+      instructions
     };
   }
 }
-
-// Export singleton instance
-export const flightClubApiService = new FlightClubApiService();

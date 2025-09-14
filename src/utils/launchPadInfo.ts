@@ -6,7 +6,7 @@ interface LaunchPadDetails {
   description: string;
 }
 
-// Comprehensive launch pad information for Florida launches
+// Comprehensive launch pad information for East Coast launches
 const LAUNCH_PAD_DETAILS: Record<string, LaunchPadDetails> = {
   // SpaceX Pads
   'SLC-40': {
@@ -54,13 +54,44 @@ const LAUNCH_PAD_DETAILS: Record<string, LaunchPadDetails> = {
     facility: 'Cape Canaveral SFS', 
     state: 'Florida',
     description: 'Blue Origin New Glenn launch pad (under construction)'
+  },
+  
+  // Wallops Flight Facility (Virginia) - Rocket Lab and Antares
+  'Rocket Lab Launch Complex 2': {
+    name: 'Rocket Lab Launch Complex 2',
+    fullLocation: 'Wallops Flight Facility, Virginia',
+    facility: 'Wallops Flight Facility',
+    state: 'Virginia',
+    description: 'Rocket Lab Electron launch pad at Wallops for East Coast missions'
+  },
+  'Launch Complex 2': {
+    name: 'Launch Complex 2',
+    fullLocation: 'Wallops Flight Facility, Virginia',
+    facility: 'Wallops Flight Facility',
+    state: 'Virginia',
+    description: 'Rocket Lab Electron launch pad at Wallops for East Coast missions'
+  },
+  'LC-2': {
+    name: 'Launch Complex 2',
+    fullLocation: 'Wallops Flight Facility, Virginia',
+    facility: 'Wallops Flight Facility',
+    state: 'Virginia',
+    description: 'Rocket Lab Electron launch pad at Wallops for East Coast missions'
+  },
+  'Pad 0A': {
+    name: 'Antares Launch Pad 0A',
+    fullLocation: 'Wallops Flight Facility, Virginia',
+    facility: 'Wallops Flight Facility',
+    state: 'Virginia',
+    description: 'Northrop Grumman Antares rocket launch pad for ISS cargo missions'
   }
 };
 
 /**
  * Get detailed information about a launch pad
+ * For unknown pads, uses API location data instead of hardcoded fallback
  */
-export function getLaunchPadDetails(padName: string): LaunchPadDetails {
+export function getLaunchPadDetails(padName: string, apiLocationData?: any): LaunchPadDetails {
   // Try exact match first
   if (LAUNCH_PAD_DETAILS[padName]) {
     return LAUNCH_PAD_DETAILS[padName];
@@ -76,21 +107,50 @@ export function getLaunchPadDetails(padName: string): LaunchPadDetails {
     return LAUNCH_PAD_DETAILS[padKey];
   }
   
-  // Default fallback for unknown Florida pads
+  // If API location data is available, use it instead of hardcoded fallback
+  if (apiLocationData) {
+    const locationName = apiLocationData.name || 'Unknown Location';
+    const countryCode = apiLocationData.country_code || 'US';
+    const stateName = getStateFromLocationName(locationName);
+    
+    return {
+      name: padName,
+      fullLocation: `${locationName}, ${countryCode}`,
+      facility: locationName,
+      state: stateName,
+      description: `Launch facility at ${locationName}`
+    };
+  }
+  
+  // Fallback for unknown East Coast pads (should rarely be used)
   return {
     name: padName,
-    fullLocation: 'Florida, USA',
-    facility: 'Florida Launch Facility',
-    state: 'Florida',
-    description: 'Launch facility in Florida'
+    fullLocation: 'East Coast, USA',
+    facility: 'East Coast Launch Facility',
+    state: 'Unknown',
+    description: 'East Coast launch facility'
   };
+}
+
+/**
+ * Helper function to extract state from location name
+ */
+function getStateFromLocationName(locationName: string): string {
+  const name = locationName.toLowerCase();
+  if (name.includes('florida') || name.includes('kennedy') || name.includes('cape canaveral')) {
+    return 'Florida';
+  }
+  if (name.includes('virginia') || name.includes('wallops')) {
+    return 'Virginia';
+  }
+  return 'Unknown';
 }
 
 /**
  * Get a user-friendly location description
  */
-export function getFriendlyLocation(padName: string): string {
-  const details = getLaunchPadDetails(padName);
+export function getFriendlyLocation(padName: string, apiLocationData?: any): string {
+  const details = getLaunchPadDetails(padName, apiLocationData);
   return `${details.name}, ${details.fullLocation}`;
 }
 

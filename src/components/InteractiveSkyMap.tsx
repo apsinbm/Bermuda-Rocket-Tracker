@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { LaunchWithVisibility } from '../types';
 import { TrajectoryData } from '../services/trajectoryService';
+import { calculateBearing, calculateDistance, GeoPoint } from '../utils/coordinateUtils';
 
 interface InteractiveSkyMapProps {
   launch: LaunchWithVisibility;
@@ -57,6 +58,19 @@ const InteractiveSkyMap: React.FC<InteractiveSkyMapProps> = ({ launch, trajector
 
   const referenceStars = getRealTimeStarPositions(new Date(launch.net));
 
+  // Constants for accurate Bermuda coordinates
+  const BERMUDA_COORDINATES = { lat: 32.3078, lng: -64.7505 };
+
+  // Validation function to ensure zenith accuracy
+  const validateZenithReference = (): boolean => {
+    // Zenith should always be at center of sky map (directly overhead at Bermuda)
+    // This represents 90° elevation at Bermuda's exact coordinates
+    return userLocation ? 
+      Math.abs(userLocation.lat - BERMUDA_COORDINATES.lat) < 0.1 &&
+      Math.abs(userLocation.lng - BERMUDA_COORDINATES.lng) < 0.1
+      : true; // Default to true if location not available
+  };
+
   const compassDirections: CompassDirection[] = [
     { label: 'North', angle: 0, shortLabel: 'N' },
     { label: 'Northeast', angle: 45, shortLabel: 'NE' },
@@ -79,12 +93,12 @@ const InteractiveSkyMap: React.FC<InteractiveSkyMapProps> = ({ launch, trajector
           });
         },
         (error) => {
-          // Fallback to Bermuda coordinates
-          setUserLocation({ lat: 32.3078, lng: -64.7505 });
+          // Fallback to exact Bermuda coordinates for consistent zenith reference
+          setUserLocation(BERMUDA_COORDINATES);
         }
       );
     } else {
-      setUserLocation({ lat: 32.3078, lng: -64.7505 });
+      setUserLocation(BERMUDA_COORDINATES);
     }
 
     // Request device orientation for compass functionality
@@ -146,15 +160,11 @@ const InteractiveSkyMap: React.FC<InteractiveSkyMapProps> = ({ launch, trajector
       launchLng = launch.pad.location.longitude;
     }
     
-    // Calculate bearing from Bermuda to launch site (this is where rockets come FROM)
-    const bearing = Math.atan2(
-      Math.sin((launchLng - (-64.7505)) * Math.PI / 180) * Math.cos(launchLat * Math.PI / 180),
-      Math.cos(32.3078 * Math.PI / 180) * Math.sin(launchLat * Math.PI / 180) - 
-      Math.sin(32.3078 * Math.PI / 180) * Math.cos(launchLat * Math.PI / 180) * 
-      Math.cos((launchLng - (-64.7505)) * Math.PI / 180)
-    ) * 180 / Math.PI;
+    // Use proper coordinate utilities for accurate bearing calculation
+    const bermuda: GeoPoint = { lat: 32.3078, lng: -64.7505 };
+    const launchSite: GeoPoint = { lat: launchLat, lng: launchLng };
     
-    return (bearing + 360) % 360;
+    return calculateBearing(bermuda, launchSite);
   };
 
   // Helper function to convert trajectory direction to bearing
@@ -333,36 +343,44 @@ const InteractiveSkyMap: React.FC<InteractiveSkyMapProps> = ({ launch, trajector
     
     // Create trajectory path showing rocket traveling ACROSS sky
     if (trajectoryData && trajectoryData.points && trajectoryData.points.length > 0) {
+      // Define Bermuda coordinates as reference point
+      const bermuda: GeoPoint = { lat: 32.3078, lng: -64.7505 };
+      
       // Use real telemetry data to create accurate sky path
       const visiblePoints = trajectoryData.points.filter(point => {
-        const distance = Math.sqrt(
-          Math.pow((point.latitude - 32.3078) * 111.32, 2) + 
-          Math.pow((point.longitude - (-64.7505)) * 111.32 * Math.cos(32.3078 * Math.PI / 180), 2)
-        );
-        const elevationAngle = Math.atan2(point.altitude / 1000, distance) * 180 / Math.PI;
+        const pointGeo: GeoPoint = { lat: point.latitude, lng: point.longitude };
+        const distance = calculateDistance(bermuda, pointGeo);
+        
+        // Improved elevation angle calculation accounting for Earth's curvature
+        const altitudeKm = point.altitude / 1000;
+        const earthRadius = 6371; // km
+        const elevationAngle = Math.atan2(altitudeKm, distance - (altitudeKm * altitudeKm) / (2 * earthRadius)) * 180 / Math.PI;
+        
         return elevationAngle > 0 && point.visible;
       });
       
       if (visiblePoints.length > 1) {
         // Convert to sky coordinates showing actual flight path
         const skyPoints = visiblePoints.map(point => {
-          const bearing = Math.atan2(
-            Math.sin((point.longitude - (-64.7505)) * Math.PI / 180) * Math.cos(point.latitude * Math.PI / 180),
-            Math.cos(32.3078 * Math.PI / 180) * Math.sin(point.latitude * Math.PI / 180) - 
-            Math.sin(32.3078 * Math.PI / 180) * Math.cos(point.latitude * Math.PI / 180) * 
-            Math.cos((point.longitude - (-64.7505)) * Math.PI / 180)
-          ) * 180 / Math.PI;
+          const pointGeo: GeoPoint = { lat: point.latitude, lng: point.longitude };
+          const bearing = calculateBearing(bermuda, pointGeo);
+          const distance = calculateDistance(bermuda, pointGeo);
           
-          const distance = Math.sqrt(
-            Math.pow((point.latitude - 32.3078) * 111.32, 2) + 
-            Math.pow((point.longitude - (-64.7505)) * 111.32 * Math.cos(32.3078 * Math.PI / 180), 2)
-          );
-          const elevationAngle = Math.atan2(point.altitude / 1000, distance) * 180 / Math.PI;
+          // Improved elevation angle calculation accounting for Earth's curvature
+          const altitudeKm = point.altitude / 1000;
+          const earthRadius = 6371; // km
+          const elevationAngle = Math.atan2(altitudeKm, distance - (altitudeKm * altitudeKm) / (2 * earthRadius)) * 180 / Math.PI;
           
           const adjustedBearing = deviceOrientation ? 
             (bearing - deviceOrientation + 360) % 360 : (bearing + 360) % 360;
           
-          const skyRadius = radius * (1 - Math.max(0, Math.min(90, elevationAngle)) / 90);
+          // Convert elevation to sky dome coordinates
+          // Center (radius 0) = zenith (90° elevation, directly overhead at Bermuda)
+          // Edge (radius = radius) = horizon (0° elevation)
+          const normalizedElevation = Math.max(0, Math.min(90, elevationAngle)) / 90;
+          const skyRadius = radius * (1 - normalizedElevation);
+          
+          // Convert bearing to screen coordinates (0° = North = top of screen)
           const x = centerX + Math.cos((adjustedBearing - 90) * Math.PI / 180) * skyRadius;
           const y = centerY + Math.sin((adjustedBearing - 90) * Math.PI / 180) * skyRadius;
           

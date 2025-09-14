@@ -4,8 +4,8 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { LaunchWithVisibility } from '../types';
-import { getTrajectoryData, TrajectoryData, TrajectoryPoint } from '../services/trajectoryService';
+import { LaunchWithVisibility, TrajectoryPoint } from '../types';
+import { getTrajectoryData, TrajectoryData } from '../services/trajectoryService';
 
 
 interface TrajectoryVisualizationProps {
@@ -60,12 +60,67 @@ export default function TrajectoryVisualization({
     ctx.fillStyle = '#111827'; // gray-900
     ctx.fillRect(0, 0, width, height);
 
-    // Set up coordinate system with fixed comprehensive bounds
-    // to show Florida East Coast, Bermuda, and full trajectory paths
-    const minLat = 23.0;  // South Florida Keys
-    const maxLat = 37.0;  // North Carolina / Virginia border
-    const minLon = -82.0; // West Florida / Gulf Coast
-    const maxLon = -62.0; // East of Bermuda
+    // Calculate dynamic bounds based on trajectory direction
+    const calculateDynamicBounds = () => {
+      let minLat = 23.0;  // South Florida Keys (default)
+      let maxLat = 37.0;  // North Carolina / Virginia border (default)
+      let minLon = -82.0; // West Florida / Gulf Coast (default)
+      let maxLon = -62.0; // East of Bermuda (default)
+      
+      if (trajectoryData.points && trajectoryData.points.length > 0) {
+        // Determine trajectory direction from first few points
+        const initialPoints = trajectoryData.points.slice(0, Math.min(10, trajectoryData.points.length));
+        const startPoint = initialPoints[0];
+        const endPoint = initialPoints[initialPoints.length - 1];
+        
+        if (startPoint && endPoint && startPoint.latitude && startPoint.longitude && endPoint.latitude && endPoint.longitude) {
+          const deltaLat = endPoint.latitude - startPoint.latitude;
+          const deltaLon = endPoint.longitude - startPoint.longitude;
+          const angle = Math.atan2(deltaLat, deltaLon) * 180 / Math.PI;
+          const normalizedAngle = (angle + 360) % 360;
+          
+          console.log(`[TrajectoryViz] Trajectory direction: ${normalizedAngle.toFixed(1)}°`);
+          
+          // Get actual trajectory bounds
+          const trajLats = trajectoryData.points.map(p => p.latitude).filter(Boolean);
+          const trajLons = trajectoryData.points.map(p => p.longitude).filter(Boolean);
+          
+          if (trajLats.length > 0 && trajLons.length > 0) {
+            const trajMinLat = Math.min(...trajLats);
+            const trajMaxLat = Math.max(...trajLats);
+            const trajMinLon = Math.min(...trajLons);
+            const trajMaxLon = Math.max(...trajLons);
+            
+            // Adjust bounds based on trajectory direction
+            if (normalizedAngle >= 315 || normalizedAngle <= 45) {
+              // North trajectory - extend north significantly
+              maxLat = Math.max(45.0, trajMaxLat + 3); // Up to Maritime Canada
+              console.log(`[TrajectoryViz] North trajectory detected, extending to ${maxLat}°N`);
+            } else if (normalizedAngle >= 135 && normalizedAngle <= 225) {
+              // South trajectory - extend south and east
+              minLat = Math.min(18.0, trajMinLat - 2); // Down to Caribbean
+              maxLon = Math.max(-55.0, trajMaxLon + 3); // Further east
+              console.log(`[TrajectoryViz] South trajectory detected, extending to ${minLat}°N, ${maxLon}°W`);
+            } else if (normalizedAngle >= 90 && normalizedAngle <= 180) {
+              // Southeast trajectory - extend south and east more
+              minLat = Math.min(20.0, trajMinLat - 2);
+              maxLon = Math.max(-58.0, trajMaxLon + 2);
+              console.log(`[TrajectoryViz] Southeast trajectory detected, extending to ${minLat}°N, ${maxLon}°W`);
+            }
+            
+            // Always include launch pad and Bermuda with some padding
+            minLat = Math.min(minLat, 25.0); // Ensure Florida Keys included
+            maxLat = Math.max(maxLat, 45.0); // Extend to Maine for full East Coast coverage
+            minLon = Math.min(minLon, -82.0); // Ensure Florida included
+            maxLon = Math.max(maxLon, -62.0); // Ensure Bermuda included
+          }
+        }
+      }
+      
+      return { minLat, maxLat, minLon, maxLon };
+    };
+
+    const { minLat, maxLat, minLon, maxLon } = calculateDynamicBounds();
 
     const latRange = maxLat - minLat;
     const lonRange = maxLon - minLon;
@@ -142,12 +197,66 @@ export default function TrajectoryVisualization({
     ctx.lineTo(lonToX(-79.29), latToY(33.24)); // Myrtle Beach
     ctx.stroke();
     
-    // North Carolina Outer Banks
+    // North Carolina Outer Banks and Virginia
     ctx.beginPath();
     ctx.moveTo(lonToX(-79.29), latToY(33.24)); // Myrtle Beach area
     ctx.lineTo(lonToX(-77.79), latToY(33.92)); // Wilmington, NC
     ctx.lineTo(lonToX(-76.68), latToY(34.72)); // Cape Lookout
     ctx.lineTo(lonToX(-75.63), latToY(35.23)); // Cape Hatteras
+    ctx.lineTo(lonToX(-75.97), latToY(36.85)); // Virginia Beach
+    ctx.lineTo(lonToX(-76.02), latToY(37.25)); // Norfolk area
+    ctx.lineTo(lonToX(-76.48), latToY(37.54)); // Hampton Roads
+    ctx.stroke();
+    
+    // Maryland and Delaware
+    ctx.beginPath();
+    ctx.moveTo(lonToX(-76.48), latToY(37.54)); // Hampton Roads
+    ctx.lineTo(lonToX(-76.34), latToY(38.29)); // Chesapeake Bay mouth
+    ctx.lineTo(lonToX(-75.05), latToY(38.78)); // Ocean City, MD / Delaware Bay
+    ctx.lineTo(lonToX(-75.09), latToY(39.76)); // Delaware coast
+    ctx.stroke();
+    
+    // New Jersey
+    ctx.beginPath();
+    ctx.moveTo(lonToX(-75.09), latToY(39.76)); // Delaware coast
+    ctx.lineTo(lonToX(-74.42), latToY(39.36)); // Atlantic City
+    ctx.lineTo(lonToX(-74.01), latToY(40.13)); // Asbury Park
+    ctx.lineTo(lonToX(-74.04), latToY(40.71)); // Sandy Hook
+    ctx.stroke();
+    
+    // New York
+    ctx.beginPath();
+    ctx.moveTo(lonToX(-74.04), latToY(40.71)); // Sandy Hook
+    ctx.lineTo(lonToX(-73.59), latToY(40.64)); // Coney Island / Brooklyn
+    ctx.lineTo(lonToX(-72.40), latToY(40.96)); // Long Island
+    ctx.lineTo(lonToX(-71.86), latToY(41.18)); // Montauk Point
+    ctx.stroke();
+    
+    // Connecticut and Rhode Island
+    ctx.beginPath();
+    ctx.moveTo(lonToX(-71.86), latToY(41.18)); // Montauk Point
+    ctx.lineTo(lonToX(-72.35), latToY(41.31)); // New London, CT
+    ctx.lineTo(lonToX(-71.40), latToY(41.49)); // Newport, RI
+    ctx.lineTo(lonToX(-71.14), latToY(41.80)); // Point Judith, RI
+    ctx.stroke();
+    
+    // Massachusetts
+    ctx.beginPath();
+    ctx.moveTo(lonToX(-71.14), latToY(41.80)); // Point Judith, RI
+    ctx.lineTo(lonToX(-70.61), latToY(41.68)); // Cape Cod
+    ctx.lineTo(lonToX(-70.05), latToY(42.04)); // Provincetown
+    ctx.lineTo(lonToX(-70.67), latToY(42.34)); // Boston area
+    ctx.lineTo(lonToX(-70.82), latToY(42.97)); // Newburyport
+    ctx.stroke();
+    
+    // New Hampshire and Maine
+    ctx.beginPath();
+    ctx.moveTo(lonToX(-70.82), latToY(42.97)); // Newburyport
+    ctx.lineTo(lonToX(-70.74), latToY(43.08)); // Portsmouth, NH
+    ctx.lineTo(lonToX(-70.25), latToY(43.66)); // Portland, ME
+    ctx.lineTo(lonToX(-69.77), latToY(44.41)); // Bar Harbor, ME
+    ctx.lineTo(lonToX(-67.60), latToY(44.81)); // Machias, ME
+    ctx.lineTo(lonToX(-67.07), latToY(45.13)); // Eastport, ME (US-Canada border)
     ctx.stroke();
     
     // Bahamas (simplified)
@@ -168,6 +277,13 @@ export default function TrajectoryVisualization({
     ctx.fillText('Georgia', lonToX(-81.6), latToY(31.5));
     ctx.fillText('S. Carolina', lonToX(-80.2), latToY(32.5));
     ctx.fillText('N. Carolina', lonToX(-77.5), latToY(34.5));
+    ctx.fillText('Virginia', lonToX(-76.5), latToY(37.2));
+    ctx.fillText('Maryland', lonToX(-75.5), latToY(38.5));
+    ctx.fillText('New Jersey', lonToX(-74.2), latToY(39.8));
+    ctx.fillText('New York', lonToX(-73.0), latToY(40.8));
+    ctx.fillText('Connecticut', lonToX(-72.2), latToY(41.3));
+    ctx.fillText('Massachusetts', lonToX(-70.8), latToY(42.2));
+    ctx.fillText('Maine', lonToX(-69.2), latToY(44.8));
     ctx.fillText('Bahamas', lonToX(-77.8), latToY(25.5));
     
     // Mark major cities
@@ -185,6 +301,28 @@ export default function TrajectoryVisualization({
     ctx.fill();
     ctx.fillStyle = '#d1d5db';
     ctx.fillText('Jacksonville', lonToX(-81.38) + 5, latToY(30.34) - 5);
+    
+    // Add more major cities along the extended coastline
+    ctx.fillStyle = '#fbbf24';
+    ctx.beginPath();
+    ctx.arc(lonToX(-76.29), latToY(36.85), 3, 0, 2 * Math.PI); // Virginia Beach
+    ctx.fill();
+    ctx.fillStyle = '#d1d5db';
+    ctx.fillText('Virginia Beach', lonToX(-76.29) + 5, latToY(36.85) - 5);
+    
+    ctx.fillStyle = '#fbbf24';
+    ctx.beginPath();
+    ctx.arc(lonToX(-74.01), latToY(40.71), 3, 0, 2 * Math.PI); // New York City
+    ctx.fill();
+    ctx.fillStyle = '#d1d5db';
+    ctx.fillText('NYC', lonToX(-74.01) + 5, latToY(40.71) - 5);
+    
+    ctx.fillStyle = '#fbbf24';
+    ctx.beginPath();
+    ctx.arc(lonToX(-71.06), latToY(42.36), 3, 0, 2 * Math.PI); // Boston
+    ctx.fill();
+    ctx.fillStyle = '#d1d5db';
+    ctx.fillText('Boston', lonToX(-71.06) + 5, latToY(42.36) - 5);
 
     // Draw launch pad (purple to distinguish from visibility indicators)
     ctx.fillStyle = '#a855f7'; // purple-500
@@ -247,14 +385,18 @@ export default function TrajectoryVisualization({
           const x = lonToX(point.longitude);
           const y = latToY(point.latitude);
           
-          // Color based on visibility (green = visible, red = not visible)
-          ctx.fillStyle = point.visible ? '#10b981' : '#ef4444';
+          // Color based on visibility from Bermuda
+          let color = point.visible ? '#22c55e' : '#ef4444'; // Green for visible, red for not visible
+          let strokeColor = '#ffffff';
+          let radius = 4;
+          
+          ctx.fillStyle = color;
           ctx.beginPath();
-          ctx.arc(x, y, 4, 0, 2 * Math.PI); // Larger radius (4 instead of 3)
+          ctx.arc(x, y, radius, 0, 2 * Math.PI);
           ctx.fill();
           
-          // Add white border for better visibility
-          ctx.strokeStyle = '#ffffff';
+          // Add contrasting border for better visibility
+          ctx.strokeStyle = strokeColor;
           ctx.lineWidth = 1;
           ctx.stroke();
         }
@@ -356,27 +498,35 @@ export default function TrajectoryVisualization({
           </label>
         </div>
         
-        {/* Legend */}
-        <div className="mt-4 flex flex-wrap gap-4 text-sm text-gray-300">
-          <div className="flex items-center">
-            <div className="w-4 h-4 bg-orange-500 rounded-full mr-2 border-2 border-orange-600"></div>
-            <span>Launch Pad</span>
+        {/* Enhanced Legend with Stage Information */}
+        <div className="mt-4 space-y-3">
+          <div className="flex flex-wrap gap-4 text-sm text-gray-300">
+            <div className="flex items-center">
+              <div className="w-4 h-4 bg-purple-500 rounded-full mr-2 border-2 border-purple-600"></div>
+              <span>Launch Pad</span>
+            </div>
+            <div className="flex items-center">
+              <div className="w-4 h-4 bg-cyan-500 rounded-full mr-2 border-2 border-cyan-600"></div>
+              <span>Bermuda</span>
+            </div>
+            <div className="flex items-center">
+              <div className="w-4 h-1 bg-blue-600 mr-2"></div>
+              <span>Trajectory Path</span>
+            </div>
           </div>
-          <div className="flex items-center">
-            <div className="w-4 h-4 bg-cyan-500 rounded-full mr-2 border-2 border-cyan-600"></div>
-            <span>Bermuda</span>
-          </div>
-          <div className="flex items-center">
-            <div className="w-4 h-1 bg-blue-600 mr-2"></div>
-            <span>Trajectory Path</span>
-          </div>
-          <div className="flex items-center">
-            <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
-            <span>Visible Segments</span>
-          </div>
-          <div className="flex items-center">
-            <div className="w-3 h-3 bg-red-500 rounded-full mr-2"></div>
-            <span>Non-visible Segments</span>
+          
+          <div className="border-t border-gray-600 pt-2">
+            <div className="text-xs font-semibold text-gray-400 mb-2">VISIBILITY FROM BERMUDA:</div>
+            <div className="flex flex-wrap gap-4 text-xs text-gray-300">
+              <div className="flex items-center">
+                <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
+                <span>Visible Above Horizon</span>
+              </div>
+              <div className="flex items-center">
+                <div className="w-3 h-3 bg-red-500 rounded-full mr-2"></div>
+                <span>Below Horizon</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
