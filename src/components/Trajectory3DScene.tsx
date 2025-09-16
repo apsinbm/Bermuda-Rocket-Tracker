@@ -10,6 +10,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Line, Text, Sphere } from '@react-three/drei';
 import * as THREE from 'three';
 import { ProcessedSimulationData, EnhancedTelemetryFrame, StageEvent } from '../services/flightClubApiService';
+import { getTelemetryFrame, getTelemetryFrameIndexAtOrAfterTime } from '../utils/telemetryUtils';
 import { PlatformInfo } from '../utils/platformUtils';
 
 interface Trajectory3DSceneProps {
@@ -277,12 +278,12 @@ const TrajectoryPath: React.FC<{
 
   // Current position indicator
   const currentPosition = useMemo(() => {
-    const frameIndex = Math.floor(playbackTime);
-    if (frameIndex >= 0 && frameIndex < telemetry.length) {
-      const frame = telemetry[frameIndex];
-      return latLngAltToVector3(frame.latitude, frame.longitude, frame.altitude);
+    const frame = getTelemetryFrame(telemetry, playbackTime);
+    if (!frame) {
+      return null;
     }
-    return null;
+
+    return latLngAltToVector3(frame.latitude, frame.longitude, frame.altitude);
   }, [telemetry, playbackTime]);
 
   // Always try to render something, even if limited data
@@ -330,8 +331,7 @@ const TrajectoryPath: React.FC<{
           
           {/* Velocity vector if available */}
           {(() => {
-            const frameIndex = Math.floor(playbackTime);
-            const currentFrame = telemetry[frameIndex];
+            const currentFrame = getTelemetryFrame(telemetry, playbackTime);
             if (currentFrame?.velocityVector) {
               const vectorLength = Math.min(currentFrame.velocityVector.magnitude * 10, 50);
               const direction = currentFrame.velocityVector.direction * Math.PI / 180;
@@ -426,9 +426,9 @@ const StageMarkers: React.FC<{
 }> = ({ simulationData, telemetry }) => {
   const markers = useMemo(() => {
     return simulationData.stageEvents.map(event => {
-      const frameIndex = telemetry.findIndex(frame => frame.time >= event.time);
+      const frameIndex = getTelemetryFrameIndexAtOrAfterTime(telemetry, event.time);
       if (frameIndex === -1) return null;
-      
+
       const frame = telemetry[frameIndex];
       const position = latLngAltToVector3(frame.latitude, frame.longitude, frame.altitude);
       
@@ -618,10 +618,9 @@ const DataOverlay: React.FC<{
   const { camera } = useThree();
   
   const currentData = useMemo(() => {
-    const frameIndex = Math.floor(playbackTime);
-    const frame = telemetry[frameIndex];
+    const frame = getTelemetryFrame(telemetry, playbackTime);
     if (!frame) return null;
-    
+
     // Find recent stage events
     const recentEvents = stageEvents.filter(
       event => event.time <= playbackTime && event.time >= playbackTime - 30

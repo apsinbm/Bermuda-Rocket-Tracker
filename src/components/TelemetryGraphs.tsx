@@ -7,6 +7,7 @@
 
 import React, { useRef, useEffect, useMemo, useCallback, useState } from 'react';
 import { ProcessedSimulationData, EnhancedTelemetryFrame, StageEvent } from '../services/flightClubApiService';
+import { getTelemetryFrame } from '../utils/telemetryUtils';
 
 interface TelemetryGraphsProps {
   simulationData: ProcessedSimulationData;
@@ -22,6 +23,7 @@ interface GraphDataset {
   unit: string;
   scale?: 'linear' | 'log';
   yAxisLabel: string;
+  valueFromFrame: (frame: EnhancedTelemetryFrame) => number;
 }
 
 const TelemetryGraphs: React.FC<TelemetryGraphsProps> = ({
@@ -70,12 +72,10 @@ const TelemetryGraphs: React.FC<TelemetryGraphsProps> = ({
       y: frame.distanceFromBermuda
     }));
 
-    const elevationData = enhancedTelemetry
-      .filter(frame => frame.aboveHorizon)
-      .map(frame => ({
-        x: frame.time,
-        y: frame.elevationAngle
-      }));
+    const elevationData = enhancedTelemetry.map(frame => ({
+      x: frame.time,
+      y: frame.elevationAngle
+    }));
 
     return {
       altitude: {
@@ -84,7 +84,8 @@ const TelemetryGraphs: React.FC<TelemetryGraphsProps> = ({
         color: '#00ff88',
         unit: 'km',
         yAxisLabel: 'Altitude (km)',
-        scale: 'linear' as const
+        scale: 'linear' as const,
+        valueFromFrame: (frame: EnhancedTelemetryFrame) => frame.altitude / 1000
       },
       speed: {
         name: 'Velocity',
@@ -92,7 +93,8 @@ const TelemetryGraphs: React.FC<TelemetryGraphsProps> = ({
         color: '#ff6b6b',
         unit: 'km/s',
         yAxisLabel: 'Speed (km/s)',
-        scale: 'linear' as const
+        scale: 'linear' as const,
+        valueFromFrame: (frame: EnhancedTelemetryFrame) => frame.speed / 1000
       },
       distance: {
         name: 'Distance from Bermuda',
@@ -100,7 +102,8 @@ const TelemetryGraphs: React.FC<TelemetryGraphsProps> = ({
         color: '#4a90e2',
         unit: 'km',
         yAxisLabel: 'Distance (km)',
-        scale: 'linear' as const
+        scale: 'linear' as const,
+        valueFromFrame: (frame: EnhancedTelemetryFrame) => frame.distanceFromBermuda
       },
       elevation: {
         name: 'Elevation Angle',
@@ -108,7 +111,8 @@ const TelemetryGraphs: React.FC<TelemetryGraphsProps> = ({
         color: '#ffd700',
         unit: '°',
         yAxisLabel: 'Elevation (degrees)',
-        scale: 'linear' as const
+        scale: 'linear' as const,
+        valueFromFrame: (frame: EnhancedTelemetryFrame) => frame.elevationAngle
       }
     };
   }, [enhancedTelemetry]);
@@ -134,12 +138,13 @@ const TelemetryGraphs: React.FC<TelemetryGraphsProps> = ({
     // Calculate data ranges
     const maxTime = Math.max(...dataset.data.map(d => d.x));
     const minTime = Math.min(...dataset.data.map(d => d.x));
+    const timeRange = Math.max(maxTime - minTime, 1);
     const maxValue = Math.max(...dataset.data.map(d => d.y));
-    const minValue = Math.min(...dataset.data.map(d => d.y), 0);
-    const valueRange = maxValue - minValue;
+    const minValue = Math.min(...dataset.data.map(d => d.y));
+    const valueRange = Math.max(maxValue - minValue, 1);
 
     // Helper functions
-    const timeToX = (time: number) => padding.left + (time - minTime) / (maxTime - minTime) * graphWidth;
+    const timeToX = (time: number) => padding.left + (time - minTime) / timeRange * graphWidth;
     const valueToY = (value: number) => padding.top + graphHeight - (value - minValue) / valueRange * graphHeight;
 
     // Draw grid
@@ -296,7 +301,7 @@ const TelemetryGraphs: React.FC<TelemetryGraphsProps> = ({
     }
 
     // Draw current playback time indicator
-    const playbackX = timeToX(playbackTime);
+    const playbackX = timeToX(Math.min(Math.max(playbackTime, minTime), maxTime));
     if (playbackX >= padding.left && playbackX <= width - padding.right) {
       ctx.strokeStyle = theme.playbackLineColor;
       ctx.lineWidth = 3;
@@ -307,12 +312,11 @@ const TelemetryGraphs: React.FC<TelemetryGraphsProps> = ({
       ctx.stroke();
 
       // Current value indicator
-      const currentDataPoint = dataset.data.find(p => Math.abs(p.x - playbackTime) < 5) ||
-                              dataset.data[Math.floor(playbackTime / 10)] ||
-                              dataset.data[0];
-      
-      if (currentDataPoint) {
-        const currentY = valueToY(currentDataPoint.y);
+      const currentFrame = getTelemetryFrame(enhancedTelemetry, playbackTime);
+      const fallbackPoint = dataset.data.length ? dataset.data[0] : null;
+      if (currentFrame || fallbackPoint) {
+        const valueSource = currentFrame ? dataset.valueFromFrame(currentFrame) : fallbackPoint!.y;
+        const currentY = valueToY(valueSource);
         ctx.fillStyle = theme.playbackLineColor;
         ctx.beginPath();
         ctx.arc(playbackX, currentY, 6, 0, Math.PI * 2);
@@ -322,7 +326,7 @@ const TelemetryGraphs: React.FC<TelemetryGraphsProps> = ({
         ctx.fillStyle = theme.background;
         ctx.strokeStyle = theme.playbackLineColor;
         ctx.lineWidth = 2;
-        const label = `${currentDataPoint.y.toFixed(1)} ${dataset.unit}`;
+        const label = `${valueSource.toFixed(1)} ${dataset.unit}`;
         const labelWidth = ctx.measureText(label).width + 10;
         const labelX = playbackX > width / 2 ? playbackX - labelWidth - 10 : playbackX + 10;
         const labelY = currentY - 20;
@@ -343,7 +347,7 @@ const TelemetryGraphs: React.FC<TelemetryGraphsProps> = ({
     ctx.textAlign = 'center';
     ctx.fillText(dataset.name, width / 2, 20);
 
-  }, [theme, playbackTime, stageEvents]);
+  }, [theme, playbackTime, stageEvents, enhancedTelemetry]);
 
   // Canvas click handler for time selection
   const handleCanvasClick = useCallback((event: React.MouseEvent<HTMLCanvasElement>, dataset: GraphDataset) => {

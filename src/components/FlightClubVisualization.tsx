@@ -217,6 +217,19 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
     return Math.max(...simulationData.enhancedTelemetry.map(frame => frame.time));
   }, [simulationData]);
 
+  useEffect(() => {
+    if (!Number.isFinite(maxTime)) {
+      return;
+    }
+
+    setPlaybackTime(prev => {
+      if (prev <= maxTime) {
+        return prev;
+      }
+      return maxTime;
+    });
+  }, [maxTime]);
+
   // Ensure playback starts at 0 when new data is loaded
   useEffect(() => {
     if (simulationData?.enhancedTelemetry && simulationData.enhancedTelemetry.length > 0 && playbackTime === 0) {

@@ -15,6 +15,10 @@ interface LaunchCache {
 let launchCache: LaunchCache | null = null;
 const CACHE_DURATION = 60 * 60 * 1000; // 1 hour in milliseconds
 
+export function clearLaunchCache(): void {
+  launchCache = null;
+}
+
 export async function fetchAllEastCoastLaunches(limit: number = 30): Promise<Launch[]> {
   // Check cache first
   if (launchCache && Date.now() < launchCache.expiresAt) {
@@ -39,37 +43,47 @@ export async function fetchAllEastCoastLaunches(limit: number = 30): Promise<Lau
     
     // Filter for upcoming status and East Coast locations (all providers welcome)
     const filteredLaunches = data.results.filter((launch: Launch) => {
+      const statusName = launch.status?.name?.toLowerCase?.() ?? '';
+      if (!statusName) {
+        console.warn('[LaunchService] Launch missing status, skipping', launch.id);
+        return false;
+      }
+
       // Filter out completed/cancelled launches
-      const status = launch.status.name.toLowerCase();
       const isUpcoming = !(
-        status.includes('successful') ||
-        status.includes('failure') ||
-        status.includes('partial failure') ||
-        status.includes('cancelled')
+        statusName.includes('successful') ||
+        statusName.includes('failure') ||
+        statusName.includes('partial failure') ||
+        statusName.includes('cancelled')
       );
 
-      // Additional location validation (ensure it's actually from our supported East Coast facilities)
-      const locationName = launch.pad.location.name.toLowerCase();
+      const pad = launch.pad;
+      const locationName = pad?.location?.name;
+      if (!pad || !locationName) {
+        console.warn('[LaunchService] Launch missing pad/location data, skipping visibility filtering', launch.id, launch.name);
+        return false;
+      }
+
+      const normalizedLocation = locationName.toLowerCase();
       const isEastCoastLocation = (
         // Florida facilities
-        locationName.includes('kennedy') ||
-        locationName.includes('cape canaveral') ||
-        locationName.includes('florida') ||
-        locationName.includes('ksc') ||
-        locationName.includes('cafs') ||
-        locationName.includes('ccafs') ||
+        normalizedLocation.includes('kennedy') ||
+        normalizedLocation.includes('cape canaveral') ||
+        normalizedLocation.includes('florida') ||
+        normalizedLocation.includes('ksc') ||
+        normalizedLocation.includes('cafs') ||
+        normalizedLocation.includes('ccafs') ||
         // Virginia facilities  
-        locationName.includes('wallops') ||
-        locationName.includes('virginia') ||
+        normalizedLocation.includes('wallops') ||
+        normalizedLocation.includes('virginia') ||
         // Generic East Coast terms
-        locationName.includes('east coast') ||
-        locationName.includes('eastern shore')
+        normalizedLocation.includes('east coast') ||
+        normalizedLocation.includes('eastern shore')
       );
 
       // Log all providers for debugging
       const provider = launch.launch_service_provider?.name || 'Unknown';
-      const location = launch.pad.location.name;
-      console.log(`[LaunchService] Found launch: ${launch.name} by ${provider} from ${location} - Upcoming: ${isUpcoming}, East Coast: ${isEastCoastLocation}`);
+      console.log(`[LaunchService] Found launch: ${launch.name} by ${provider} from ${locationName} - Upcoming: ${isUpcoming}, East Coast: ${isEastCoastLocation}`);
 
       return isUpcoming && isEastCoastLocation;
     });

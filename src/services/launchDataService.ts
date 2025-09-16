@@ -6,7 +6,7 @@
 import { Launch } from '../types';
 import { LaunchUpdateManager, getRefreshInterval, getUrgencyLevel } from './launchUpdateScheduler';
 import { launchDatabase } from './launchDatabase';
-import { fetchAllFloridaLaunches } from './launchService';
+import { fetchAllFloridaLaunches, clearLaunchCache } from './launchService';
 import { launchMatchingService } from './launchMatchingService';
 import { launchDelayDetectionService } from './launchDelayDetectionService';
 
@@ -169,6 +169,7 @@ export class LaunchDataService {
     
     // Clear database cache
     launchDatabase.clearCache();
+    clearLaunchCache();
     
     // Force fresh API fetch
     await this.fetchLaunches();
@@ -431,6 +432,8 @@ export class LaunchDataService {
       lastFetch: 0,
       nextScheduledUpdate: 0
     };
+
+    clearLaunchCache();
     
     // Fetch fresh data from API
     await this.fetchLaunches();

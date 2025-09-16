@@ -6,6 +6,7 @@
 
 import React from 'react';
 import { ProcessedSimulationData } from '../services/flightClubApiService';
+import { getTelemetryFrame } from '../utils/telemetryUtils';
 
 interface FlightClub2DVisualizationProps {
   simulationData: ProcessedSimulationData;
@@ -29,7 +30,7 @@ const FlightClub2DVisualization: React.FC<FlightClub2DVisualizationProps> = ({
   };
 
   // Get current telemetry frame
-  const currentFrame = enhancedTelemetry[Math.floor(playbackTime / 10)] || enhancedTelemetry[0];
+  const currentFrame = getTelemetryFrame(enhancedTelemetry, playbackTime) || enhancedTelemetry[0];
 
   const theme = {
     background: darkMode ? 'bg-gray-900' : 'bg-white',
