@@ -250,11 +250,40 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
     loadFlightClubData();
   }, [launch.id, launch.name]);
 
-  // Playback control with race condition prevention
-  const maxTime = useMemo(() => {
-    if (!simulationData?.enhancedTelemetry.length) return 0;
-    return Math.max(...simulationData.enhancedTelemetry.map(frame => frame.time));
+  // Playback window calculation with upper bounds to avoid excessively long timelines
+  const maxDisplayTime = useMemo(() => {
+    if (!simulationData?.enhancedTelemetry?.length) {
+      return 0;
+    }
+
+    const frames = simulationData.enhancedTelemetry;
+    const lastTelemetryTime = frames[frames.length - 1]?.time ?? 0;
+
+    const candidateTimes: number[] = [];
+
+    const lastVisible = simulationData.visibilitySummary?.lastVisible;
+    if (typeof lastVisible === 'number' && Number.isFinite(lastVisible) && lastVisible > 0) {
+      candidateTimes.push(lastVisible);
+    }
+
+    if (simulationData.stageEvents.length) {
+      const lastStageEvent = Math.max(...simulationData.stageEvents.map(event => event.time));
+      if (Number.isFinite(lastStageEvent) && lastStageEvent > 0) {
+        candidateTimes.push(lastStageEvent);
+      }
+    }
+
+    const cappedTelemetry = Math.min(lastTelemetryTime, 1800); // Limit to 30 minutes to keep UI responsive
+
+    if (candidateTimes.length) {
+      const paddedCandidate = Math.max(...candidateTimes) + 120; // 2 minute buffer
+      return Math.min(cappedTelemetry, paddedCandidate);
+    }
+
+    return cappedTelemetry;
   }, [simulationData]);
+
+  const maxTime = maxDisplayTime;
 
   useEffect(() => {
     if (!Number.isFinite(maxTime)) {
@@ -648,6 +677,7 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
               playbackTime={playbackTime}
               onTimeSelect={handleTimeSelect}
               darkMode={darkMode}
+              maxDisplayTime={maxDisplayTime}
             />
           </div>
         )}
@@ -695,6 +725,7 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
               playbackTime={playbackTime}
               onTimeSelect={handleTimeSelect}
               darkMode={darkMode}
+              maxDisplayTime={maxDisplayTime}
             />
           </div>
         )}
@@ -708,6 +739,7 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
                 playbackTime={playbackTime}
                 onTimeSelect={handleTimeSelect}
                 darkMode={darkMode}
+                maxDisplayTime={maxDisplayTime}
               />
             </div>
             <div className={`${themeClasses.card} border ${themeClasses.border} rounded-lg overflow-hidden`}>

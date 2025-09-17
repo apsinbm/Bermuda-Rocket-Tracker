@@ -13,6 +13,7 @@ interface StageEventTimelineProps {
   playbackTime: number;
   onTimeSelect?: (time: number) => void;
   darkMode?: boolean;
+  maxDisplayTime?: number;
 }
 
 interface EnhancedStageEvent extends StageEvent {
@@ -27,20 +28,47 @@ const StageEventTimeline: React.FC<StageEventTimelineProps> = ({
   simulationData,
   playbackTime,
   onTimeSelect,
-  darkMode = true
+  darkMode = true,
+  maxDisplayTime
 }) => {
   const [hoveredEvent, setHoveredEvent] = useState<string | null>(null);
   const [expandedEvent, setExpandedEvent] = useState<string | null>(null);
 
   const { stageEvents, enhancedTelemetry } = simulationData;
 
+  const telemetryFrames = useMemo(() => {
+    if (!enhancedTelemetry.length) {
+      return [] as EnhancedTelemetryFrame[];
+    }
+
+    if (typeof maxDisplayTime === 'number' && maxDisplayTime >= 0) {
+      const cutoff = maxDisplayTime + 1;
+      return enhancedTelemetry.filter(frame => frame.time <= cutoff);
+    }
+
+    return enhancedTelemetry;
+  }, [enhancedTelemetry, maxDisplayTime]);
+
+  const timelineEvents = useMemo(() => {
+    if (!stageEvents.length) {
+      return [] as StageEvent[];
+    }
+
+    if (typeof maxDisplayTime === 'number' && maxDisplayTime >= 0) {
+      const cutoff = maxDisplayTime + 1;
+      return stageEvents.filter(event => event.time <= cutoff);
+    }
+
+    return stageEvents;
+  }, [stageEvents, maxDisplayTime]);
+
   // Enhanced events with additional metadata
   const enhancedEvents = useMemo(() => {
-    return stageEvents.map((event, index): EnhancedStageEvent => {
+    return timelineEvents.map((event, index): EnhancedStageEvent => {
       // Find closest telemetry frame
-      const telemetryFrame = enhancedTelemetry.find(
+      const telemetryFrame = telemetryFrames.find(
         frame => Math.abs(frame.time - event.time) < 5
-      ) || enhancedTelemetry[Math.min(Math.floor(event.time / 10), enhancedTelemetry.length - 1)];
+      ) || telemetryFrames[Math.min(Math.floor(event.time / 10), Math.max(telemetryFrames.length - 1, 0))];
 
       // Categorize events
       let category: EnhancedStageEvent['category'] = 'other';
@@ -88,13 +116,17 @@ const StageEventTimeline: React.FC<StageEventTimelineProps> = ({
         description
       } as EnhancedStageEvent;
     }).sort((a, b) => a.time - b.time);
-  }, [stageEvents, enhancedTelemetry]);
+  }, [timelineEvents, telemetryFrames]);
 
   // Timeline scale
   const maxTime = useMemo(() => {
-    if (!enhancedTelemetry.length) return 600;
-    return Math.max(...enhancedTelemetry.map(frame => frame.time));
-  }, [enhancedTelemetry]);
+    if (typeof maxDisplayTime === 'number' && maxDisplayTime >= 0) {
+      return maxDisplayTime;
+    }
+
+    if (!telemetryFrames.length) return 600;
+    return Math.max(...telemetryFrames.map(frame => frame.time));
+  }, [telemetryFrames, maxDisplayTime]);
 
   // Theme configuration
   const theme = {

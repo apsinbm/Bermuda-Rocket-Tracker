@@ -71,6 +71,7 @@ interface ProcessedSimulationData {
   }>;
   lastUpdated: string;
   cached: boolean;
+  warning?: string;
 }
 
 // Bermuda coordinates
@@ -419,8 +420,10 @@ function processSimulationData(rawData: FlightClubSimulationResponse): Processed
       const groundDistance = calculateDistance(previous.latitude, previous.longitude, current.latitude, current.longitude);
       const totalDistance = Math.sqrt(groundDistance * groundDistance + deltaAlt * deltaAlt);
       
+      const velocityMagnitude = totalDistance / deltaTime; // km per second
+
       current.velocityVector = {
-        magnitude: totalDistance / (deltaTime / 3600), // km/h to km/s conversion
+        magnitude: velocityMagnitude,
         direction: calculateBearing(previous.latitude, previous.longitude, current.latitude, current.longitude)
       };
     }
@@ -467,35 +470,72 @@ async function fetchSimulationFromFlightClub(missionId: string): Promise<FlightC
     throw new Error('Flight Club API key not configured');
   }
   
-  const response = await fetch(`https://api.flightclub.io/v3/simulation/lite?missionId=${encodeURIComponent(missionId)}`, {
-    method: 'GET',
-    headers: {
-      'X-Api-Key': apiKey,
-      'Accept': 'application/json',
-      'User-Agent': 'Bermuda-Rocket-Tracker/1.0'
-    },
-    // Add timeout for upstream request protection
-    signal: AbortSignal.timeout(15000) // 15 second timeout
-  });
-  
-  if (!response.ok) {
-    throw new Error(`Flight Club API error: ${response.status} ${response.statusText}`);
+  const attempts: Array<{ param: string; value: string }> = [];
+
+  const baseId = missionId.trim();
+  if (!baseId) {
+    throw new Error('Mission identifier is required');
   }
-  
-  // Validate Content-Type
-  const contentType = response.headers.get('content-type');
-  if (!contentType || !contentType.includes('application/json')) {
-    throw new Error(`Unexpected content type: ${contentType}. Expected application/json`);
+
+  const normalizedId = baseId.replace(/^\/+|\/+$/g, '');
+
+  // Attempt order: specific parameter inferred from id prefix, then generic fallbacks
+  if (normalizedId.startsWith('sim_')) {
+    attempts.push({ param: 'simulationId', value: normalizedId });
   }
-  
-  // Check Content-Length to prevent large responses
-  const contentLength = response.headers.get('content-length');
-  const maxSize = 10 * 1024 * 1024; // 10MB limit
-  if (contentLength && parseInt(contentLength) > maxSize) {
-    throw new Error(`Response too large: ${contentLength} bytes. Maximum allowed: ${maxSize} bytes`);
+
+  if (normalizedId.startsWith('mis_') || normalizedId.startsWith('mission_')) {
+    attempts.push({ param: 'missionId', value: normalizedId });
   }
-  
-  return await response.json();
+
+  // Generic fallbacks
+  attempts.push({ param: 'missionId', value: normalizedId });
+  attempts.push({ param: 'simulationId', value: normalizedId });
+  attempts.push({ param: 'id', value: normalizedId });
+
+  let lastError: unknown = null;
+
+  for (const attempt of attempts) {
+    const url = `https://api.flightclub.io/v3/simulation/lite?${attempt.param}=${encodeURIComponent(attempt.value)}`;
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'X-Api-Key': apiKey,
+          'Accept': 'application/json',
+          'User-Agent': 'Bermuda-Rocket-Tracker/1.0'
+        },
+        // Add timeout for upstream request protection
+        signal: AbortSignal.timeout(15000) // 15 second timeout
+      });
+
+      if (!response.ok) {
+        lastError = new Error(`Flight Club API error: ${response.status} ${response.statusText} (attempt ${attempt.param})`);
+        continue;
+      }
+
+      // Validate Content-Type
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        lastError = new Error(`Unexpected content type: ${contentType}. Expected application/json (attempt ${attempt.param})`);
+        continue;
+      }
+
+      // Check Content-Length to prevent large responses
+      const contentLength = response.headers.get('content-length');
+      const maxSize = 10 * 1024 * 1024; // 10MB limit
+      if (contentLength && parseInt(contentLength) > maxSize) {
+        lastError = new Error(`Response too large: ${contentLength} bytes. Maximum allowed: ${maxSize} bytes (attempt ${attempt.param})`);
+        continue;
+      }
+
+      return await response.json();
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError ?? new Error('Unable to fetch Flight Club simulation data');
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -561,11 +601,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         warning: 'Serving cached data due to API unavailability'
       });
     }
-    
-    return res.status(500).json({ 
-      error: 'Unable to fetch simulation data',
-      missionId,
-      details: process.env.NODE_ENV === 'development' ? (error instanceof Error ? error.message : String(error)) : undefined
-    });
+
+    try {
+      console.log(`[FlightClub] Falling back to generated telemetry for ${missionId}`);
+      const fallback = generateRealisticISSTelemetry(missionId, `${missionId} (Generated Fallback)`);
+
+      const fallbackWithWarning: ProcessedSimulationData = {
+        ...fallback,
+        warning: 'Generated fallback telemetry due to FlightClub API error'
+      };
+
+      // Cache fallback with shorter TTL to avoid repeated generation but allow retry soon
+      simulationCache.set(missionId, {
+        data: fallbackWithWarning,
+        timestamp: Date.now(),
+        ttl: 60 * 1000 // 1 minute
+      });
+
+      res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=60');
+      return res.status(200).json(fallbackWithWarning);
+    } catch (fallbackError) {
+      console.error('[FlightClub] Fallback generation failed:', fallbackError);
+      return res.status(500).json({ 
+        error: 'Unable to fetch simulation data',
+        missionId,
+        details: process.env.NODE_ENV === 'development' ? (error instanceof Error ? error.message : String(error)) : undefined
+      });
+    }
   }
 }
