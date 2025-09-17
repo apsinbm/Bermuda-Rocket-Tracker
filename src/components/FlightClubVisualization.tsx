@@ -68,6 +68,18 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
   const [showLiveGuide, setShowLiveGuide] = useState(false);
   const [scene3DReady, setScene3DReady] = useState(false);
 
+  const getSimulationId = (mission?: FlightClubMission | null): string | null => {
+    if (!mission) return null;
+    const guidPattern = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+    if (mission.flightClubSimId && guidPattern.test(mission.flightClubSimId)) {
+      return mission.flightClubSimId;
+    }
+    if (guidPattern.test(mission.id)) {
+      return mission.id;
+    }
+    return mission.flightClubSimId || mission.id;
+  };
+
   // Handle mission selection (now used for auto-selection)
   const handleMissionSelect = async (missionId: string) => {
     try {
@@ -85,9 +97,13 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
       setFlightClubMission(selectedMission);
       
       // Get simulation data using the selected mission
-      const missionIdToUse = selectedMission.flightClubSimId || selectedMission.id;
-      console.log(`[FlightClub] Using ${selectedMission.flightClubSimId ? 'flightClubSimId' : 'fallback id'}: ${missionIdToUse} for mission: ${selectedMission.description}`);
-      
+      const missionIdToUse = getSimulationId(selectedMission);
+      console.log(`[FlightClub] Using simulation id ${missionIdToUse} for mission: ${selectedMission.description}`);
+
+      if (!missionIdToUse) {
+        throw new Error('No simulation identifier available for this mission');
+      }
+
       const simData = await FlightClubApiService.getSimulationData(missionIdToUse, launch.id);
       setSimulationData(simData);
       
@@ -182,8 +198,11 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
           console.log(`[FlightClub] Found mission: ${mission.id} - ${mission.description}`);
 
           // Get simulation data - prefer flightClubSimId over regular id
-          const missionIdToUse = mission.flightClubSimId || mission.id;
-          console.log(`[FlightClub] Using ${mission.flightClubSimId ? 'flightClubSimId' : 'fallback id'}: ${missionIdToUse} for mission: ${mission.description}`);
+          const missionIdToUse = getSimulationId(mission);
+          if (!missionIdToUse) {
+            throw new Error('No simulation identifier available for mission');
+          }
+          console.log(`[FlightClub] Using simulation id ${missionIdToUse} for mission: ${mission.description}`);
         
           const simData = await FlightClubApiService.getSimulationData(missionIdToUse, launch.id);
           setSimulationData(simData);
