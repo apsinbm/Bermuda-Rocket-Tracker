@@ -9,16 +9,10 @@ import { errorHandlingService, ErrorType, EnhancedError } from '../errorHandling
 global.fetch = jest.fn();
 
 describe('ErrorHandlingService', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    errorHandlingService.resetMetrics();
-    jest.clearAllTimers();
-    jest.useFakeTimers();
-  });
-
-  afterEach(() => {
-    jest.useRealTimers();
-  });
+beforeEach(() => {
+  jest.clearAllMocks();
+  errorHandlingService.resetMetrics();
+});
 
   describe('Error Classification', () => {
     test('should classify network errors correctly', () => {

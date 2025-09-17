@@ -128,7 +128,8 @@ export async function fetchAllEastCoastLaunches(limit: number = 30): Promise<Lau
 export async function fetchSpaceXFloridaLaunches(limit: number = 15): Promise<Launch[]> {
   const allLaunches = await fetchAllEastCoastLaunches(limit * 2);
   return allLaunches.filter(launch => {
-    const provider = launch.launch_service_provider?.name.toLowerCase().includes('spacex');
+    const providerName = launch.launch_service_provider?.name?.toLowerCase?.() || '';
+    const provider = providerName.includes('spacex');
     const location = launch.pad.location.name.toLowerCase();
     const isFloridaOnly = location.includes('florida') || location.includes('kennedy') || location.includes('cape canaveral');
     return provider && isFloridaOnly;
@@ -149,7 +150,7 @@ export async function fetchUpcomingLaunches(limit: number = 20): Promise<Launch[
 export async function fetchLaunchesByProvider(providerName: string, limit: number = 10): Promise<Launch[]> {
   const allLaunches = await fetchAllEastCoastLaunches(limit * 3);
   return allLaunches.filter(launch => 
-    launch.launch_service_provider?.name.toLowerCase().includes(providerName.toLowerCase())
+    (launch.launch_service_provider?.name?.toLowerCase?.() || '').includes(providerName.toLowerCase())
   ).slice(0, limit);
 }
 

@@ -13,8 +13,11 @@ import { notificationService } from './services/notificationService';
 import { ExhaustPlumeVisibilityCalculator } from './services/ExhaustPlumeVisibilityCalculator';
 import { cacheInitializer } from './services/cacheInitializer';
 import { clearProjectKuiperCache } from './services/trajectoryService';
+import { FlightClubApiService } from './services/flightClubApiService';
 
-
+if (process.env.NODE_ENV !== 'production' && process.env.REACT_APP_FLIGHTCLUB_DEMO === 'true') {
+  FlightClubApiService.enableDemoMode(true);
+}
 function App() {
   const [processedLaunches, setProcessedLaunches] = useState<LaunchWithVisibility[]>([]);
   const [darkMode, setDarkMode] = useState(true);

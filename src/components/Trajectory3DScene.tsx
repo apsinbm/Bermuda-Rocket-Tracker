@@ -409,7 +409,7 @@ const VisibilityCone: React.FC<{
       <mesh position={[0, coneHeight / 2, 0]} rotation={[0, 0, 0]}>
         <coneGeometry args={[coneRadius, coneHeight, 8]} />
         <meshBasicMaterial 
-          color="#00ff0033" 
+          color="#00ff00" 
           transparent 
           opacity={0.2}
           side={THREE.DoubleSide}
@@ -662,7 +662,6 @@ const DataOverlay: React.FC<{
         color="#ffffff"
         anchorX="left"
         anchorY="top"
-        font="/fonts/inter-medium.woff"
       >
         {`T+${Math.floor(playbackTime / 60)}:${(Math.floor(playbackTime) % 60).toString().padStart(2, '0')}`}
       </Text>
