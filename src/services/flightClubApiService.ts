@@ -266,13 +266,22 @@ export class FlightClubApiService {
   /**
    * Fetch detailed simulation data for a specific mission with caching
    */
-  static async getSimulationData(missionId: string, launchId?: string): Promise<ProcessedSimulationData> {
+  static async getSimulationData(
+    missionId: string,
+    launchId?: string,
+    options?: { fallbackMissionId?: string }
+  ): Promise<ProcessedSimulationData> {
     if (!missionId) {
       throw new Error('Mission ID is required');
     }
-    
+
+    const missionIdsToTry = [missionId];
+    if (options?.fallbackMissionId && !missionIdsToTry.includes(options.fallbackMissionId)) {
+      missionIdsToTry.push(options.fallbackMissionId);
+    }
+
     // Check if in demo mode or if this is the demo mission
-    if (this.DEMO_MODE || missionId === 'demo-starlink-mission') {
+    if (this.DEMO_MODE || missionIdsToTry.includes('demo-starlink-mission')) {
       console.log('[FlightClub] Using demo mode - generating sample simulation data');
       const demoTelemetry = this.generateDemoTelemetry();
       const visibleFrames = demoTelemetry.filter(f => f.aboveHorizon);
@@ -308,60 +317,76 @@ export class FlightClubApiService {
       };
     }
     
-    // Try to get from cache first
+    // Try to get from cache first for any mission id we will attempt
     if (launchId) {
       try {
         const { indexedDBCache } = await import('./indexedDBCache');
-        const cachedData = await indexedDBCache.getFlightClubData(launchId, missionId);
-        if (cachedData) {
-          console.log(`[FlightClub] Using cached simulation data for ${missionId}`);
-          return cachedData;
+        for (const id of missionIdsToTry) {
+          const cachedData = await indexedDBCache.getFlightClubData(launchId, id);
+          if (cachedData) {
+            console.log(`[FlightClub] Using cached simulation data for ${id}`);
+            return cachedData;
+          }
         }
       } catch (cacheError) {
         console.warn('[FlightClub] Cache read failed, fetching from API:', cacheError);
       }
     }
-    
-    try {
-      console.log(`[FlightClub] Attempting to fetch simulation data for missionId: ${missionId}`);
-      const response = await fetch(`${this.BASE_URL}/simulation/${encodeURIComponent(missionId)}`, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json'
+
+    let lastError: unknown = new Error('Unable to fetch simulation data');
+
+    for (const id of missionIdsToTry) {
+      try {
+        console.log(`[FlightClub] Attempting to fetch simulation data for missionId: ${id}`);
+        const response = await fetch(`${this.BASE_URL}/simulation/${encodeURIComponent(id)}`, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json'
+          }
+        });
+
+        if (!response.ok) {
+          const errorMessage = `API request failed: ${response.status} ${response.statusText}`;
+          console.warn(`[FlightClub] ${errorMessage} for missionId: ${id}`);
+
+          if (response.status === 404) {
+            lastError = new Error(`Mission not found or no simulation data available (ID: ${id})`);
+            continue;
+          }
+
+          // Capture the response body for additional context if available
+          try {
+            const errorText = await response.text();
+            lastError = new Error(`${errorMessage}: ${errorText}`);
+          } catch {
+            lastError = new Error(errorMessage);
+          }
+          continue;
         }
-      });
-      
-      if (!response.ok) {
-        const errorMessage = `API request failed: ${response.status} ${response.statusText}`;
-        console.warn(`[FlightClub] ${errorMessage} for missionId: ${missionId}`);
-        
-        if (response.status === 404) {
-          throw new Error(`Mission not found or no simulation data available (ID: ${missionId})`);
+
+        const data = await response.json();
+
+        // Cache the data if launchId is provided
+        if (launchId && data) {
+          try {
+            const { indexedDBCache } = await import('./indexedDBCache');
+            await indexedDBCache.cacheFlightClubData(launchId, id, data);
+            console.log(`[FlightClub] Cached simulation data for ${id}`);
+          } catch (cacheError) {
+            console.warn('[FlightClub] Cache write failed:', cacheError);
+          }
         }
-        throw new Error(errorMessage);
+
+        console.log(`[FlightClub] ✓ Successfully fetched simulation for ${id}: ${data.enhancedTelemetry?.length || 0} frames, ${data.visibilitySummary?.visibleFrameCount || 0} visible`);
+        return data;
+
+      } catch (error) {
+        console.error(`[FlightClub] ✗ Failed to fetch simulation for ${id}:`, error);
+        lastError = error;
       }
-      
-      const data = await response.json();
-      
-      // Cache the data if launchId is provided
-      if (launchId && data) {
-        try {
-          const { indexedDBCache } = await import('./indexedDBCache');
-          await indexedDBCache.cacheFlightClubData(launchId, missionId, data);
-          console.log(`[FlightClub] Cached simulation data for ${missionId}`);
-        } catch (cacheError) {
-          console.warn('[FlightClub] Cache write failed:', cacheError);
-        }
-      }
-      
-      // Log successful fetch
-      console.log(`[FlightClub] ✓ Successfully fetched simulation for ${missionId}: ${data.enhancedTelemetry?.length || 0} frames, ${data.visibilitySummary?.visibleFrameCount || 0} visible`);
-      
-      return data;
-    } catch (error) {
-      console.error(`[FlightClub] ✗ Failed to fetch simulation for ${missionId}:`, error);
-      throw error;
     }
+
+    throw lastError instanceof Error ? lastError : new Error(String(lastError));
   }
   
   /**

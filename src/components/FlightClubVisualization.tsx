@@ -98,13 +98,17 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
       
       // Get simulation data using the selected mission
       const missionIdToUse = getSimulationId(selectedMission);
-      console.log(`[FlightClub] Using simulation id ${missionIdToUse} for mission: ${selectedMission.description}`);
 
       if (!missionIdToUse) {
         throw new Error('No simulation identifier available for this mission');
       }
 
-      const simData = await FlightClubApiService.getSimulationData(missionIdToUse, launch.id);
+      console.log(`[FlightClub] Using simulation id ${missionIdToUse} for mission: ${selectedMission.description}`);
+
+      const fallbackId = selectedMission.id !== missionIdToUse ? selectedMission.id : undefined;
+      const simData = await FlightClubApiService.getSimulationData(missionIdToUse, launch.id, {
+        fallbackMissionId: fallbackId
+      });
       setSimulationData(simData);
       
       console.log(`[FlightClub] Loaded ${simData.enhancedTelemetry.length} telemetry frames from manually selected mission`);
@@ -203,8 +207,11 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
             throw new Error('No simulation identifier available for mission');
           }
           console.log(`[FlightClub] Using simulation id ${missionIdToUse} for mission: ${mission.description}`);
-        
-          const simData = await FlightClubApiService.getSimulationData(missionIdToUse, launch.id);
+
+          const fallbackId = mission.id !== missionIdToUse ? mission.id : undefined;
+          const simData = await FlightClubApiService.getSimulationData(missionIdToUse, launch.id, {
+            fallbackMissionId: fallbackId
+          });
           setSimulationData(simData);
           
           console.log(`[FlightClub] Loaded ${simData.enhancedTelemetry.length} telemetry frames`);
