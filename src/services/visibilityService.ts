@@ -355,9 +355,15 @@ async function calculateVisibilityFromFlightClub(launch: LaunchWithFlightClub): 
     }
     
     // Get trajectory data from Flight Club (with caching)
+    const primarySimId = launch.flightClubMatch.flightClubMission.flightClubSimId || launch.flightClubMatch.flightClubMission.id;
+    const fallbackSimId = launch.flightClubMatch.flightClubMission.flightClubSimId
+      ? launch.flightClubMatch.flightClubMission.id
+      : undefined;
+
     const trajectoryData = await FlightClubApiService.getSimulationData(
-      launch.flightClubMatch.flightClubMission.id,
-      launch.id // Pass launchId for caching
+      primarySimId,
+      launch.id, // Pass launchId for caching
+      { fallbackMissionId: fallbackSimId }
     );
     
     if (!trajectoryData || !trajectoryData.enhancedTelemetry || trajectoryData.enhancedTelemetry.length === 0) {

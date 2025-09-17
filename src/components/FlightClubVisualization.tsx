@@ -106,6 +106,7 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
       console.log(`[FlightClub] Using simulation id ${missionIdToUse} for mission: ${selectedMission.description}`);
 
       const fallbackId = selectedMission.id !== missionIdToUse ? selectedMission.id : undefined;
+      console.log('[FlightClub] Fetching simulation data with primary id:', missionIdToUse, 'fallback id:', fallbackId);
       const simData = await FlightClubApiService.getSimulationData(missionIdToUse, launch.id, {
         fallbackMissionId: fallbackId
       });
@@ -166,6 +167,15 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
           }
         }
         
+        const logMission = (label: string, mission: FlightClubMission) => {
+          const primaryId = getSimulationId(mission);
+          const fallbackId = mission.id !== primaryId ? mission.id : undefined;
+          console.log(`[FlightClub] ${label}: ${mission.description}`);
+          console.log(`[FlightClub] → missionId: ${mission.id}`);
+          console.log(`[FlightClub] → flightClubSimId: ${mission.flightClubSimId}`);
+          console.log(`[FlightClub] → primary simulation id: ${primaryId}, fallback: ${fallbackId}`);
+        };
+
         // Find matching FlightClub mission
         const mission = await FlightClubApiService.findMissionForLaunch(launch.id, launch.name);
         
@@ -185,12 +195,13 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
           });
           
           if (suitableMissions.length > 0) {
-            // Auto-select the first suitable mission
+            logMission('Auto-selecting mission', suitableMissions[0]);
             await handleMissionSelect(suitableMissions[0].id);
             return;
           } else {
             // Fallback to first available mission
             if (missionsResponse.missions.length > 0) {
+              logMission('Fallback mission', missionsResponse.missions[0]);
               await handleMissionSelect(missionsResponse.missions[0].id);
               return;
             }
@@ -198,6 +209,7 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
         }
 
         if (mission) {
+          logMission('Matched mission', mission);
           setFlightClubMission(mission);
           console.log(`[FlightClub] Found mission: ${mission.id} - ${mission.description}`);
 
@@ -209,6 +221,7 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
           console.log(`[FlightClub] Using simulation id ${missionIdToUse} for mission: ${mission.description}`);
 
           const fallbackId = mission.id !== missionIdToUse ? mission.id : undefined;
+          console.log('[FlightClub] Fetching simulation data with primary id:', missionIdToUse, 'fallback id:', fallbackId);
           const simData = await FlightClubApiService.getSimulationData(missionIdToUse, launch.id, {
             fallbackMissionId: fallbackId
           });

@@ -218,8 +218,13 @@ async function fetchFlightClubTrajectory(launchLibraryId: string, launch: Launch
       return null;
     }
     
+    const primarySimId = mission.flightClubSimId || mission.id;
+    const fallbackSimId = mission.flightClubSimId ? mission.id : undefined;
+
     // Get enhanced simulation data with stage information
-    const simulationData = await FlightClubApiService.getSimulationData(mission.id, launchLibraryId);
+    const simulationData = await FlightClubApiService.getSimulationData(primarySimId, launchLibraryId, {
+      fallbackMissionId: fallbackSimId
+    });
     
     if (!simulationData.enhancedTelemetry || simulationData.enhancedTelemetry.length === 0) {
       console.log(`[FlightClub] No telemetry data available for mission: ${mission.id}`);
