@@ -79,7 +79,46 @@ export interface MissionsResponse {
 
 // Service class
 export class FlightClubApiService {
-  private static readonly BASE_URL = '/api/flightclub';
+  private static readonly DEFAULT_PROXY_BASE = '/api/flightclub';
+  private static readonly REMOTE_FALLBACK_BASE = 'https://bermuda-rocket-tracker.vercel.app/api/flightclub';
+
+  private static getProxyBases(): string[] {
+    const configured = (process.env.REACT_APP_FLIGHTCLUB_PROXY_BASE_URL || '').trim();
+    const bases = [
+      configured,
+      this.DEFAULT_PROXY_BASE,
+      this.REMOTE_FALLBACK_BASE
+    ]
+      .filter(Boolean)
+      .map(base => base.endsWith('/') ? base.slice(0, -1) : base);
+
+    return Array.from(new Set(bases));
+  }
+
+  private static async fetchThroughProxy(path: string, init: RequestInit): Promise<Response> {
+    const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+    const errors: string[] = [];
+
+    for (const base of this.getProxyBases()) {
+      const url = `${base}${normalizedPath}`;
+      try {
+        const response = await fetch(url, init);
+        if (response.ok) {
+          if (base !== this.DEFAULT_PROXY_BASE) {
+            console.log(`[FlightClub] Using fallback proxy base: ${base}`);
+          }
+          return response;
+        }
+
+        errors.push(`HTTP ${response.status} ${response.statusText} (${url})`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        errors.push(`Network error (${url}): ${message}`);
+      }
+    }
+
+    throw new Error(errors.join('; '));
+  }
   // SECURITY: Removed hardcoded API key - use proxy in all environments
   private static readonly DEV_FALLBACK_API_KEY = null;
   
@@ -237,22 +276,18 @@ export class FlightClubApiService {
     }
     
     try {
-      const response = await fetch(`${this.BASE_URL}/missions`, {
+      const response = await this.fetchThroughProxy('/missions', {
         method: 'GET',
         headers: {
           'Accept': 'application/json'
         }
       });
-      
-      if (!response.ok) {
-        // Auto-enable demo mode if API is unavailable
-        console.warn(`[FlightClub] API unavailable (${response.status}), enabling demo mode`);
-        this.enableDemoMode(true);
-        return this.getMissions(); // Recursive call with demo mode
-      }
-      
+
       const data = await response.json();
       console.log(`[FlightClub] Fetched ${data.missions?.length || 0} missions (cached: ${data.cached})`);
+      if (this.DEMO_MODE) {
+        this.enableDemoMode(false);
+      }
       
       return data;
     } catch (error) {
@@ -338,31 +373,12 @@ export class FlightClubApiService {
     for (const id of missionIdsToTry) {
       try {
         console.log(`[FlightClub] Attempting to fetch simulation data for missionId: ${id}`);
-        const response = await fetch(`${this.BASE_URL}/simulation/${encodeURIComponent(id)}`, {
+        const response = await this.fetchThroughProxy(`/simulation/${encodeURIComponent(id)}`, {
           method: 'GET',
           headers: {
             'Accept': 'application/json'
           }
         });
-
-        if (!response.ok) {
-          const errorMessage = `API request failed: ${response.status} ${response.statusText}`;
-          console.warn(`[FlightClub] ${errorMessage} for missionId: ${id}`);
-
-          if (response.status === 404) {
-            lastError = new Error(`Mission not found or no simulation data available (ID: ${id})`);
-            continue;
-          }
-
-          // Capture the response body for additional context if available
-          try {
-            const errorText = await response.text();
-            lastError = new Error(`${errorMessage}: ${errorText}`);
-          } catch {
-            lastError = new Error(errorMessage);
-          }
-          continue;
-        }
 
         const data = await response.json();
 
@@ -378,6 +394,9 @@ export class FlightClubApiService {
         }
 
         console.log(`[FlightClub] ✓ Successfully fetched simulation for ${id}: ${data.enhancedTelemetry?.length || 0} frames, ${data.visibilitySummary?.visibleFrameCount || 0} visible`);
+        if (this.DEMO_MODE) {
+          this.enableDemoMode(false);
+        }
         return data;
 
       } catch (error) {
