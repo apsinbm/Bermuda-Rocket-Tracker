@@ -6,9 +6,10 @@
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { getCachedMissions, setCachedMissions, type MissionCacheEntry } from './cache';
 
 // Types
-interface FlightClubMission {
+export interface FlightClubMission {
   id: string;
   description: string;
   startDateTime: string;
@@ -28,23 +29,6 @@ interface FlightClubMissionsResponse {
   missions: FlightClubMission[];
   lastUpdated: string;
   cached: boolean;
-}
-
-// Cache storage (in-memory for serverless)
-let cache: {
-  data: FlightClubMission[] | null;
-  timestamp: number;
-  ttl: number;
-} = {
-  data: null,
-  timestamp: 0,
-  ttl: 15 * 60 * 1000, // 15 minutes
-};
-
-// SECURITY: Rate limiting moved to middleware with distributed storage
-
-function isCacheValid(): boolean {
-  return cache.data !== null && (Date.now() - cache.timestamp) < cache.ttl;
 }
 
 async function fetchMissionsFromFlightClub(): Promise<FlightClubMission[]> {
@@ -103,50 +87,52 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   
   try {
-    // SECURITY: Rate limiting handled by middleware
-    
-    // Check cache first
-    if (isCacheValid()) {
-      console.log('Serving missions from cache');
+    // Attempt to use shared cache first
+    const cachedEntry = await getCachedMissions();
+    if (cachedEntry && Date.now() - cachedEntry.cachedAt < 6 * 60 * 60 * 1000) {
+      console.log('[FlightClub] Serving missions from shared cache');
+      res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=300');
       return res.status(200).json({
-        missions: cache.data,
-        lastUpdated: new Date(cache.timestamp).toISOString(),
-        cached: true
-      } as FlightClubMissionsResponse);
+        missions: cachedEntry.missions,
+        lastUpdated: new Date(cachedEntry.cachedAt).toISOString(),
+        cached: true,
+        warning: cachedEntry.warning
+      } as FlightClubMissionsResponse & { warning?: string });
     }
-    
+
     // Fetch fresh data from Flight Club API
-    console.log('Fetching fresh missions from Flight Club API');
+    console.log('[FlightClub] Fetching fresh missions from Flight Club API');
     const missions = await fetchMissionsFromFlightClub();
-    
-    // Update cache with ALL missions (no pre-filtering)
-    cache.data = missions;
-    cache.timestamp = Date.now();
-    
-    // IMPORTANT: Return ALL missions to allow proper matching
-    // Filtering moved to client-side for UI display purposes only
+
+    const entry: MissionCacheEntry = {
+      missions,
+      cachedAt: Date.now()
+    };
+
+    await setCachedMissions(entry);
+
     console.log(`[FlightClub] Returning ${missions.length} missions (no server-side filtering)`);
-    
-    // Set cache headers for client-side caching
-    res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=300'); // 5 minutes
-    
+
+    res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=300');
+
     return res.status(200).json({
-      missions: missions, // Return ALL missions
-      lastUpdated: new Date().toISOString(),
+      missions,
+      lastUpdated: new Date(entry.cachedAt).toISOString(),
       cached: false
     } as FlightClubMissionsResponse);
-    
+
   } catch (error) {
     console.error('Flight Club missions API error:', error);
-    
-    // Return cached data if available, even if stale
-    if (cache.data) {
-      console.log('Serving stale cache due to API error');
+
+    const cachedEntry = await getCachedMissions();
+    if (cachedEntry) {
+      console.log('[FlightClub] Serving cached missions due to API error');
+      res.setHeader('Cache-Control', 's-maxage=60');
       return res.status(200).json({
-        missions: cache.data,
-        lastUpdated: new Date(cache.timestamp).toISOString(),
+        missions: cachedEntry.missions,
+        lastUpdated: new Date(cachedEntry.cachedAt).toISOString(),
         cached: true,
-        warning: 'Serving cached data due to API unavailability'
+        warning: 'Serving cached data due to FlightClub API error'
       } as FlightClubMissionsResponse & { warning: string });
     }
     
@@ -156,3 +142,5 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 }
+
+export { fetchMissionsFromFlightClub };

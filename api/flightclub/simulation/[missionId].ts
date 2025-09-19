@@ -48,7 +48,7 @@ interface EnhancedTelemetryFrame extends FlightClubTelemetryFrame {
   };
 }
 
-interface ProcessedSimulationData {
+export interface ProcessedSimulationData {
   missionId: string;
   rawData: FlightClubSimulationResponse;
   enhancedTelemetry: EnhancedTelemetryFrame[];
@@ -78,15 +78,6 @@ interface ProcessedSimulationData {
 const BERMUDA_LAT = 32.3078;
 const BERMUDA_LNG = -64.7505;
 const EARTH_RADIUS_KM = 6371;
-
-// Cache storage
-const simulationCache = new Map<string, { 
-  data: ProcessedSimulationData; 
-  timestamp: number; 
-  ttl: number; 
-}>();
-
-// SECURITY: Rate limiting moved to middleware with distributed storage
 
 // Haversine distance calculation
 function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -374,7 +365,7 @@ function generateRealisticISSTelemetry(missionId: string, description: string): 
 }
 
 // Process raw telemetry data
-function processSimulationData(rawData: FlightClubSimulationResponse): ProcessedSimulationData {
+export function processSimulationData(rawData: FlightClubSimulationResponse): ProcessedSimulationData {
   // First, validate the telemetry data for realism
   const validation = validateTelemetryData(rawData);
   
@@ -556,49 +547,46 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { missionId } = req.query as { missionId: string };
   
   try {
-    // SECURITY: Rate limiting and input validation handled by middleware
-    
-    // Check cache
-    const cacheKey = missionId;
-    const cached = simulationCache.get(cacheKey);
-    const cacheTtl = 5 * 60 * 1000; // 5 minutes for simulation data
-    
-    if (cached && (Date.now() - cached.timestamp) < cached.ttl) {
-      console.log(`Serving simulation ${missionId} from cache`);
-      return res.status(200).json({
-        ...cached.data,
-        cached: true
-      });
+    const forceRefresh = req.query.refresh === 'true';
+
+    if (!forceRefresh) {
+      const cachedEntry = await getCachedSimulation(missionId);
+      if (cachedEntry) {
+        console.log(`[FlightClub] Serving cached simulation ${missionId}`);
+        res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600');
+        return res.status(200).json({
+          ...cachedEntry.data,
+          cached: true
+        });
+      }
     }
-    
-    // Fetch and process fresh data
-    console.log(`Fetching simulation ${missionId} from Flight Club API`);
+
+    console.log(`[FlightClub] Fetching simulation ${missionId} from Flight Club API`);
     const rawSimulation = await fetchSimulationFromFlightClub(missionId);
     const processedData = processSimulationData(rawSimulation);
-    
-    // Update cache
-    simulationCache.set(cacheKey, {
+
+    await setCachedSimulation(missionId, {
       data: processedData,
-      timestamp: Date.now(),
-      ttl: cacheTtl
+      cachedAt: Date.now()
     });
-    
-    // Set cache headers
-    res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600'); // 5 min fresh, 10 min stale
-    
-    return res.status(200).json(processedData);
-    
+
+    res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600');
+    return res.status(200).json({
+      ...processedData,
+      cached: false
+    });
+
   } catch (error) {
     console.error(`Flight Club simulation API error for ${missionId}:`, error);
-    
-    // Return cached data if available
-    const cached = simulationCache.get(missionId);
-    if (cached) {
-      console.log(`Serving stale simulation ${missionId} due to API error`);
+
+    const cachedEntry = await getCachedSimulation(missionId);
+    if (cachedEntry) {
+      console.log(`[FlightClub] Serving cached simulation ${missionId} due to API error`);
+      res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=300');
       return res.status(200).json({
-        ...cached.data,
+        ...cachedEntry.data,
         cached: true,
-        warning: 'Serving cached data due to API unavailability'
+        warning: 'Serving cached data due to FlightClub API error'
       });
     }
 
@@ -611,12 +599,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         warning: 'Generated fallback telemetry due to FlightClub API error'
       };
 
-      // Cache fallback with shorter TTL to avoid repeated generation but allow retry soon
-      simulationCache.set(missionId, {
+      await setCachedSimulation(missionId, {
         data: fallbackWithWarning,
-        timestamp: Date.now(),
-        ttl: 60 * 1000 // 1 minute
-      });
+        cachedAt: Date.now()
+      }, 60);
 
       res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=60');
       return res.status(200).json(fallbackWithWarning);
@@ -630,3 +616,5 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 }
+
+export { fetchSimulationFromFlightClub };

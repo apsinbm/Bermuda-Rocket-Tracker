@@ -53,6 +53,12 @@
       ]
     }
   ],
+  "crons": [
+    {
+      "path": "/api/jobs/refresh-flightclub",
+      "schedule": "* * * * *"
+    }
+  ],
   "rewrites": [
     {
       "source": "/((?!api/).*)",
