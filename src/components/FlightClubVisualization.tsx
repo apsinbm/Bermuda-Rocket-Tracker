@@ -9,7 +9,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { LaunchWithVisibility } from '../types';
 import { detectPlatform } from '../utils/platformUtils';
-import { FlightClubApiService, ProcessedSimulationData, FlightClubMission } from '../services/flightClubApiService';
+import { FlightClubApiService, ProcessedSimulationData, FlightClubMission, StageEvent } from '../services/flightClubApiService';
 import FlightClub2DVisualization from './FlightClub2DVisualization';
 import TelemetryGraphs from './TelemetryGraphs';
 import Trajectory3DScene from './Trajectory3DScene';
@@ -250,40 +250,106 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
     loadFlightClubData();
   }, [launch.id, launch.name]);
 
-  // Playback window calculation with upper bounds to avoid excessively long timelines
-  const maxDisplayTime = useMemo(() => {
+  // Playback control
+  const maxTime = useMemo(() => {
     if (!simulationData?.enhancedTelemetry?.length) {
       return 0;
     }
+    return Math.max(...simulationData.enhancedTelemetry.map(frame => frame.time));
+  }, [simulationData]);
 
-    const frames = simulationData.enhancedTelemetry;
-    const lastTelemetryTime = frames[frames.length - 1]?.time ?? 0;
-
-    const candidateTimes: number[] = [];
-
-    const lastVisible = simulationData.visibilitySummary?.lastVisible;
-    if (typeof lastVisible === 'number' && Number.isFinite(lastVisible) && lastVisible > 0) {
-      candidateTimes.push(lastVisible);
+  const currentTelemetryFrame = useMemo(() => {
+    if (!simulationData?.enhancedTelemetry?.length) {
+      return null;
     }
 
-    if (simulationData.stageEvents.length) {
-      const lastStageEvent = Math.max(...simulationData.stageEvents.map(event => event.time));
-      if (Number.isFinite(lastStageEvent) && lastStageEvent > 0) {
-        candidateTimes.push(lastStageEvent);
+    const frames = simulationData.enhancedTelemetry;
+    const lastFrame = frames[frames.length - 1];
+    if (!lastFrame) {
+      return null;
+    }
+
+    const clampedTime = Math.max(0, Math.min(playbackTime, lastFrame.time));
+
+    // Binary search for the nearest frame to the current playback time
+    let low = 0;
+    let high = frames.length - 1;
+    while (low < high) {
+      const mid = Math.floor((low + high) / 2);
+      if (frames[mid].time < clampedTime) {
+        low = mid + 1;
+      } else {
+        high = mid;
       }
     }
 
-    const cappedTelemetry = Math.min(lastTelemetryTime, 1800); // Limit to 30 minutes to keep UI responsive
+    const candidate = frames[low];
+    const previous = frames[Math.max(low - 1, 0)];
 
-    if (candidateTimes.length) {
-      const paddedCandidate = Math.max(...candidateTimes) + 120; // 2 minute buffer
-      return Math.min(cappedTelemetry, paddedCandidate);
+    if (!candidate) {
+      return previous ?? null;
     }
 
-    return cappedTelemetry;
-  }, [simulationData]);
+    if (!previous) {
+      return candidate;
+    }
 
-  const maxTime = maxDisplayTime;
+    return Math.abs(candidate.time - clampedTime) <= Math.abs(previous.time - clampedTime)
+      ? candidate
+      : previous;
+  }, [simulationData, playbackTime]);
+
+  const activeStageEvent = useMemo(() => {
+    if (!simulationData?.stageEvents?.length) {
+      return null;
+    }
+
+    let latest: StageEvent | null = null;
+    for (const event of simulationData.stageEvents) {
+      if (event.time <= playbackTime) {
+        latest = event;
+      } else {
+        break;
+      }
+    }
+    return latest;
+  }, [simulationData?.stageEvents, playbackTime]);
+
+  const nextStageEvent = useMemo(() => {
+    if (!simulationData?.stageEvents?.length) {
+      return null;
+    }
+
+    return simulationData.stageEvents.find(event => event.time > playbackTime) ?? null;
+  }, [simulationData?.stageEvents, playbackTime]);
+
+  const stageProgress = useMemo(() => {
+    if (!activeStageEvent) {
+      return null;
+    }
+
+    if (!nextStageEvent) {
+      return 1;
+    }
+
+    const segmentDuration = nextStageEvent.time - activeStageEvent.time;
+    if (segmentDuration <= 0) {
+      return 0;
+    }
+
+    return Math.min(1, Math.max(0, (playbackTime - activeStageEvent.time) / segmentDuration));
+  }, [activeStageEvent, nextStageEvent, playbackTime]);
+
+  const overlayTheme = useMemo(() => ({
+    chip: darkMode
+      ? 'border border-white/20 bg-white/10 text-white'
+      : 'border border-slate-200 bg-white/80 text-slate-900',
+    panel: darkMode
+      ? 'border border-white/15 bg-black/40 text-white'
+      : 'border border-slate-200 bg-white/80 text-slate-900',
+    subtleText: darkMode ? 'text-slate-300' : 'text-slate-600',
+    accentText: darkMode ? 'text-sky-200' : 'text-sky-700'
+  }), [darkMode]);
 
   useEffect(() => {
     if (!Number.isFinite(maxTime)) {
@@ -389,6 +455,185 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
     button: darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-200 hover:bg-gray-300',
     buttonActive: darkMode ? 'bg-blue-600 hover:bg-blue-500' : 'bg-blue-500 hover:bg-blue-600'
   };
+
+  const altitudeKm = currentTelemetryFrame ? (currentTelemetryFrame.altitude / 1000).toFixed(1) : '--';
+  const velocityKm = currentTelemetryFrame ? (currentTelemetryFrame.speed / 1000).toFixed(2) : '--';
+  const downrangeKm = currentTelemetryFrame ? currentTelemetryFrame.distanceFromBermuda.toFixed(0) : '--';
+  const visibilityLabel = currentTelemetryFrame
+    ? currentTelemetryFrame.aboveHorizon
+      ? 'Visible from Bermuda'
+      : 'Below Horizon'
+    : 'Awaiting Telemetry';
+  const visibilityAccentClass = currentTelemetryFrame
+    ? currentTelemetryFrame.aboveHorizon
+      ? darkMode
+        ? 'text-emerald-300'
+        : 'text-emerald-600'
+      : darkMode
+        ? 'text-rose-300'
+        : 'text-rose-600'
+    : overlayTheme.subtleText;
+  const stageStatusLabel = activeStageEvent ? activeStageEvent.event : 'Awaiting Stage Events';
+  const stageStatusTime = activeStageEvent ? formatTime(activeStageEvent.time) : 'T+--:--';
+  const nextStageLabel = nextStageEvent ? nextStageEvent.event : 'Mission Complete';
+  const stageProgressPercent = stageProgress !== null ? Math.round(stageProgress * 100) : null;
+
+  const render3DVisualizationPanel = (panelHeightClass: string) => (
+    <div className={`${themeClasses.card} border ${themeClasses.border} rounded-3xl overflow-hidden relative`}> 
+      <div
+        className={`p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b ${
+          darkMode ? 'border-gray-700/70' : 'border-gray-200/80'
+        } backdrop-blur-sm`}
+      >
+        <div className="flex flex-wrap items-center gap-3">
+          <h3 className="font-semibold text-lg">3D Trajectory Studio</h3>
+          {currentTelemetryFrame && (
+            <span className={`${overlayTheme.chip} rounded-full px-3 py-1 text-xs uppercase tracking-[0.2em] backdrop-blur-sm`}>
+              Live {formatTime(playbackTime)}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className={`text-xs uppercase tracking-[0.2em] ${themeClasses.textSecondary}`}>Camera</span>
+          <select
+            value={view3DMode}
+            onChange={(e) => setView3DMode(e.target.value as View3DMode)}
+            className={`px-3 py-2 rounded-lg text-sm font-medium shadow-sm ${
+              darkMode ? 'bg-black/40 border border-white/10 text-white' : 'bg-white border border-slate-200 text-slate-900'
+            }`}
+          >
+            <option value="overview">Overview</option>
+            <option value="bermuda-pov">Bermuda POV</option>
+            <option value="side-profile">Side Profile</option>
+            <option value="top-down">Top Down</option>
+          </select>
+        </div>
+      </div>
+      <div className={`${panelHeightClass} relative`}> 
+        <div className="pointer-events-none absolute inset-0">
+          <div className="absolute inset-0 bg-gradient-to-br from-sky-500/20 via-transparent to-indigo-600/20" />
+          <div className="absolute -inset-10 bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.35),_transparent_60%)] blur-3xl opacity-80" />
+          <div className="absolute inset-0 rounded-3xl border border-white/10" />
+        </div>
+
+        {simulationData ? (
+          <>
+            {currentTelemetryFrame && (
+              <div className="pointer-events-none absolute inset-x-4 top-4 z-20 flex flex-col gap-3 text-xs md:text-sm">
+                <div className={`flex flex-wrap items-center justify-between gap-3 ${darkMode ? 'text-white' : 'text-slate-900'}`}>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className={`uppercase tracking-[0.3em] text-[0.65rem] ${overlayTheme.subtleText}`}>
+                      Live Telemetry Feed
+                    </span>
+                    <span className={`${overlayTheme.chip} rounded-full px-3 py-1 font-semibold backdrop-blur-sm flex items-center gap-2`}>
+                      <span className={`${visibilityAccentClass}`}>●</span>
+                      {visibilityLabel}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-2 md:gap-3 font-semibold">
+                    <span className={`${overlayTheme.chip} rounded-full px-3 py-1 backdrop-blur-sm`}>Altitude
+                      <span className={`${overlayTheme.accentText} ml-2`}>{altitudeKm} km</span>
+                    </span>
+                    <span className={`${overlayTheme.chip} rounded-full px-3 py-1 backdrop-blur-sm`}>Velocity
+                      <span className={`${overlayTheme.accentText} ml-2`}>{velocityKm} km/s</span>
+                    </span>
+                    <span className={`${overlayTheme.chip} rounded-full px-3 py-1 backdrop-blur-sm`}>Downrange
+                      <span className={`${overlayTheme.accentText} ml-2`}>{downrangeKm} km</span>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {stageProgress !== null && (
+              <div className="pointer-events-none absolute inset-x-4 bottom-4 z-20 flex flex-col gap-3">
+                <div className={`${overlayTheme.panel} rounded-2xl p-4 shadow-lg backdrop-blur`}> 
+                  <div className="flex flex-col gap-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <div className={`text-[0.65rem] uppercase tracking-[0.3em] ${overlayTheme.subtleText}`}>
+                          Stage Timeline
+                        </div>
+                        <div className="text-sm font-semibold">{stageStatusLabel}</div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-6 text-xs font-medium">
+                        <div>
+                          <div className={`text-[0.6rem] uppercase tracking-[0.3em] ${overlayTheme.subtleText}`}>Current</div>
+                          <div>{stageStatusTime}</div>
+                        </div>
+                        <div>
+                          <div className={`text-[0.6rem] uppercase tracking-[0.3em] ${overlayTheme.subtleText}`}>Next</div>
+                          <div>{nextStageLabel}</div>
+                        </div>
+                        {stageProgressPercent !== null && (
+                          <div>
+                            <div className={`text-[0.6rem] uppercase tracking-[0.3em] ${overlayTheme.subtleText}`}>Progress</div>
+                            <div>{stageProgressPercent}%</div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-sky-400 via-blue-500 to-indigo-500"
+                        style={{ width: `${Math.max(0, Math.min(100, (stageProgress ?? 0) * 100))}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {!scene3DReady && (
+              <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/50 text-white">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+                  <div className="text-lg font-medium">Initializing 3D Scene...</div>
+                  <div className="text-sm opacity-75 mt-1">Loading Earth textures and trajectory data</div>
+                </div>
+              </div>
+            )}
+
+            <Canvas
+              camera={canvasConfig.camera}
+              gl={canvasConfig.gl}
+              performance={canvasConfig.performance}
+              style={canvasConfig.style}
+              className="relative z-10 h-full w-full"
+              onCreated={(state) => {
+                const checkReady = () => {
+                  if (simulationData?.enhancedTelemetry?.length > 0) {
+                    setScene3DReady(true);
+                  } else {
+                    setTimeout(() => setScene3DReady(true), 800);
+                  }
+                };
+
+                setTimeout(checkReady, 500);
+                setTimeout(checkReady, 1200);
+              }}
+            >
+              <Trajectory3DScene
+                simulationData={simulationData}
+                viewMode={view3DMode}
+                playbackTime={playbackTime}
+                highlightedStage={highlightedStage}
+                showDataOverlay={true}
+                platform={platform}
+              />
+            </Canvas>
+          </>
+        ) : (
+          <div className={`flex items-center justify-center h-full ${darkMode ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600'}`}>
+            <div className="text-center">
+              <div className="text-lg font-semibold mb-2">3D Visualization</div>
+              <div className="text-sm opacity-75">Telemetry data not available yet</div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <div className={`space-y-6 p-6 ${themeClasses.background} ${themeClasses.text} rounded-lg`}>
@@ -513,75 +758,7 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
             </div>
 
             {/* 3D View */}
-            <div className={`${themeClasses.card} border ${themeClasses.border} rounded-lg overflow-hidden`}>
-              <div className="p-4 border-b border-gray-600 flex justify-between items-center">
-                <h3 className="font-semibold">3D Visualization</h3>
-                <select
-                  value={view3DMode}
-                  onChange={(e) => setView3DMode(e.target.value as View3DMode)}
-                  className={`px-2 py-1 rounded text-sm ${themeClasses.card} ${themeClasses.text} border ${themeClasses.border}`}
-                >
-                  <option value="overview">Overview</option>
-                  <option value="bermuda-pov">Bermuda POV</option>
-                  <option value="side-profile">Side Profile</option>
-                  <option value="top-down">Top Down</option>
-                </select>
-              </div>
-              <div className="h-96 relative">
-                {simulationData ? (
-                  <>
-                    {/* Loading overlay for 3D scene */}
-                    {!scene3DReady && (
-                      <div className="absolute inset-0 z-10 flex items-center justify-center bg-black bg-opacity-50 rounded-lg">
-                        <div className="text-center text-white">
-                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-2"></div>
-                          <div className="text-sm">Initializing 3D Scene...</div>
-                          <div className="text-xs opacity-75 mt-1">Loading textures and models</div>
-                        </div>
-                      </div>
-                    )}
-                    
-                    <Canvas 
-                      camera={canvasConfig.camera}
-                      gl={canvasConfig.gl}
-                      performance={canvasConfig.performance}
-                      style={canvasConfig.style}
-                      onCreated={(state) => {
-                        // Canvas is created, set up faster ready detection
-                        const checkReady = () => {
-                          if (simulationData?.enhancedTelemetry?.length > 0) {
-                            setScene3DReady(true);
-                          } else {
-                            // If no data, still show the scene (Earth only)
-                            setTimeout(() => setScene3DReady(true), 800);
-                          }
-                        };
-                        
-                        // Check immediately and after a short delay
-                        setTimeout(checkReady, 500);
-                        setTimeout(checkReady, 1200);
-                      }}
-                    >
-                      <Trajectory3DScene
-                        simulationData={simulationData}
-                        viewMode={view3DMode}
-                        playbackTime={playbackTime}
-                        highlightedStage={highlightedStage}
-                        showDataOverlay={true}
-                        platform={platform}
-                      />
-                    </Canvas>
-                  </>
-                ) : (
-                  <div className={`flex items-center justify-center h-full ${darkMode ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600'} rounded-lg`}>
-                    <div className="text-center">
-                      <div className="text-lg font-medium mb-2">🌍 3D Visualization</div>
-                      <div className="text-sm opacity-75">Loading trajectory data...</div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
+            {render3DVisualizationPanel('h-96')}
           </div>
         )}
 
@@ -597,78 +774,7 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
           </div>
         )}
 
-        {viewMode === '3d' && (
-          <div className={`${themeClasses.card} border ${themeClasses.border} rounded-lg overflow-hidden`}>
-            <div className="p-4 border-b border-gray-600 flex justify-between items-center">
-              <h3 className="font-semibold text-lg">3D Trajectory Visualization</h3>
-              <select
-                value={view3DMode}
-                onChange={(e) => setView3DMode(e.target.value as View3DMode)}
-                className={`px-3 py-2 rounded ${themeClasses.card} ${themeClasses.text} border ${themeClasses.border}`}
-              >
-                <option value="overview">Overview</option>
-                <option value="bermuda-pov">Bermuda Point of View</option>
-                <option value="side-profile">Side Profile</option>
-                <option value="top-down">Top Down</option>
-              </select>
-            </div>
-            <div className="h-[600px] relative">
-              {simulationData ? (
-                <>
-                  {/* Loading overlay for 3D scene */}
-                  {!scene3DReady && (
-                    <div className="absolute inset-0 z-10 flex items-center justify-center bg-black bg-opacity-50 rounded-lg">
-                      <div className="text-center text-white">
-                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
-                        <div className="text-lg font-medium">Initializing 3D Scene...</div>
-                        <div className="text-sm opacity-75 mt-2">Loading Earth textures and trajectory data</div>
-                        <div className="text-xs opacity-50 mt-1">This may take a few moments</div>
-                      </div>
-                    </div>
-                  )}
-                  
-                  <Canvas 
-                    camera={canvasConfig.camera}
-                    gl={canvasConfig.gl}
-                    performance={canvasConfig.performance}
-                    style={canvasConfig.style}
-                    onCreated={(state) => {
-                      // Canvas is created, set up ready detection
-                      const checkReady = () => {
-                        if (simulationData?.enhancedTelemetry?.length > 0) {
-                          setScene3DReady(true);
-                        } else {
-                          // If no data, still show the scene (Earth only)
-                          setTimeout(() => setScene3DReady(true), 1000);
-                        }
-                      };
-                      
-                      // Check after initialization delays
-                      setTimeout(checkReady, 800);
-                      setTimeout(checkReady, 1500);
-                    }}
-                  >
-                    <Trajectory3DScene
-                      simulationData={simulationData}
-                      viewMode={view3DMode}
-                      playbackTime={playbackTime}
-                      highlightedStage={highlightedStage}
-                      showDataOverlay={true}
-                      platform={platform}
-                    />
-                  </Canvas>
-                </>
-              ) : (
-                <div className={`flex items-center justify-center h-full ${darkMode ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600'} rounded-lg`}>
-                  <div className="text-center">
-                    <div className="text-lg font-medium mb-2">🌍 3D Visualization</div>
-                    <div className="text-sm opacity-75">Loading trajectory data...</div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+        {viewMode === '3d' && render3DVisualizationPanel('h-[600px]')}
 
         {viewMode === 'timeline' && (
           <div className={`${themeClasses.card} border ${themeClasses.border} rounded-lg overflow-hidden`}>
@@ -677,7 +783,6 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
               playbackTime={playbackTime}
               onTimeSelect={handleTimeSelect}
               darkMode={darkMode}
-              maxDisplayTime={maxDisplayTime}
             />
           </div>
         )}
@@ -725,7 +830,6 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
               playbackTime={playbackTime}
               onTimeSelect={handleTimeSelect}
               darkMode={darkMode}
-              maxDisplayTime={maxDisplayTime}
             />
           </div>
         )}
@@ -739,7 +843,6 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
                 playbackTime={playbackTime}
                 onTimeSelect={handleTimeSelect}
                 darkMode={darkMode}
-                maxDisplayTime={maxDisplayTime}
               />
             </div>
             <div className={`${themeClasses.card} border ${themeClasses.border} rounded-lg overflow-hidden`}>

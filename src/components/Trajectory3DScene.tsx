@@ -219,76 +219,105 @@ const TrajectoryPath: React.FC<{
   highlightedStage?: number | null;
   onFirstFrameReady?: () => void;
 }> = ({ telemetry, playbackTime, highlightedStage, onFirstFrameReady }) => {
-  const points = useMemo(() => {
+  const controlPoints = useMemo(() => {
     if (!telemetry || telemetry.length === 0) {
-      return [];
+      return [] as THREE.Vector3[];
     }
-    
-    // Downsample for performance - take every 3rd point
-    const sampledTelemetry = telemetry.filter((_, index) => index % 3 === 0);
-    
-    return sampledTelemetry.map(frame => 
+
+    return telemetry.map(frame =>
       latLngAltToVector3(frame.latitude, frame.longitude, frame.altitude)
     );
   }, [telemetry]);
 
-  // Create color array based on speed and stage with enhanced coloring
-  const colors = useMemo(() => {
-    if (!telemetry || telemetry.length === 0 || points.length === 0) {
-      return [];
-    }
-    
-    const colorArray: [number, number, number][] = [];
-    const sampledTelemetry = telemetry.filter((_, index) => index % 3 === 0);
-    
-    for (let i = 0; i < points.length; i++) {
-      const frame = sampledTelemetry[i];
-      if (!frame) continue;
-      
-      const speedFactor = Math.min((frame.speed || 0) / 8000, 1); // Normalize to max ~8km/s
-      const altitudeFactor = Math.min((frame.altitude || 0) / 400000, 1); // Normalize to 400km
-      
-      let r, g, b;
-      
-      if (highlightedStage && frame.stageNumber === highlightedStage) {
-        // Highlight specific stage in white
-        r = g = b = 1;
-      } else if (frame.stageNumber === 1) {
-        // Stage 1: Orange to yellow gradient based on speed
-        r = 1;
-        g = 0.4 + speedFactor * 0.6;
-        b = 0;
-      } else if (frame.stageNumber === 2) {
-        // Stage 2: Blue to cyan gradient based on altitude
-        r = 0;
-        g = 0.4 + altitudeFactor * 0.6;
-        b = 1;
-      } else {
-        // Default: Speed-based coloring
-        r = speedFactor;
-        g = 1 - speedFactor;
-        b = Math.max(0.2, 1 - speedFactor);
-      }
-      
-      colorArray.push([r, g, b]);
-    }
-    
-    return colorArray;
-  }, [points.length, telemetry, highlightedStage]);
-
-  // Current position indicator
-  const currentPosition = useMemo(() => {
-    const frame = getTelemetryFrame(telemetry, playbackTime);
-    if (!frame) {
+  const smoothCurve = useMemo(() => {
+    if (controlPoints.length < 2) {
       return null;
     }
 
-    return latLngAltToVector3(frame.latitude, frame.longitude, frame.altitude);
-  }, [telemetry, playbackTime]);
+    return new THREE.CatmullRomCurve3(controlPoints, false, 'centripetal', 0.5);
+  }, [controlPoints]);
 
-  // Always try to render something, even if limited data
-  if (!points.length || points.length === 0) {
-    // Show at least the launch site if no trajectory data
+  const curveSamples = useMemo(() => {
+    if (!smoothCurve) {
+      return controlPoints;
+    }
+
+    const sampleCount = Math.min(Math.max(controlPoints.length * 4, 200), 1200);
+    return smoothCurve.getPoints(sampleCount);
+  }, [smoothCurve, controlPoints]);
+
+  const colors = useMemo(() => {
+    if (!telemetry || telemetry.length === 0 || curveSamples.length === 0) {
+      return [] as [number, number, number][];
+    }
+
+    const maxIndex = Math.max(telemetry.length - 1, 1);
+
+    return curveSamples.map((_, index) => {
+      const t = index / Math.max(curveSamples.length - 1, 1);
+      const telemetryIndex = Math.min(Math.floor(t * maxIndex), maxIndex);
+      const frame = telemetry[telemetryIndex];
+
+      const speedFactor = Math.min((frame.speed || 0) / 8000, 1);
+      const altitudeFactor = Math.min((frame.altitude || 0) / 400000, 1);
+
+      if (highlightedStage && frame.stageNumber === highlightedStage) {
+        return [1, 1, 1] as [number, number, number];
+      }
+
+      if (frame.stageNumber === 1) {
+        return [1, 0.4 + speedFactor * 0.6, 0] as [number, number, number];
+      }
+
+      if (frame.stageNumber === 2) {
+        return [0, 0.4 + altitudeFactor * 0.6, 1] as [number, number, number];
+      }
+
+      const r = speedFactor;
+      const g = 1 - speedFactor;
+      const b = Math.max(0.2, 1 - speedFactor);
+
+      return [r, g, b] as [number, number, number];
+    });
+  }, [curveSamples, telemetry, highlightedStage]);
+
+  const currentPosition = useMemo(() => {
+    if (!telemetry || telemetry.length === 0 || curveSamples.length === 0) {
+      return null;
+    }
+
+    if (smoothCurve) {
+      const lastFrame = telemetry[telemetry.length - 1];
+      const maxTime = Math.max(lastFrame?.time ?? 0, 1);
+      const t = Math.min(Math.max(playbackTime / maxTime, 0), 1);
+      return smoothCurve.getPoint(t);
+    }
+
+    return curveSamples[curveSamples.length - 1];
+  }, [telemetry, playbackTime, curveSamples, smoothCurve]);
+
+  const glowGeometry = useMemo(() => {
+    if (!smoothCurve) {
+      return null;
+    }
+
+    const tubularSegments = Math.min(Math.max(curveSamples.length * 2, 400), 2000);
+    return new THREE.TubeGeometry(smoothCurve, tubularSegments, 0.8, 24, false);
+  }, [smoothCurve, curveSamples.length]);
+
+  useEffect(() => {
+    return () => {
+      glowGeometry?.dispose();
+    };
+  }, [glowGeometry]);
+
+  useEffect(() => {
+    if (curveSamples.length > 0) {
+      onFirstFrameReady?.();
+    }
+  }, [curveSamples.length, onFirstFrameReady]);
+
+  if (!telemetry || telemetry.length === 0 || curveSamples.length === 0) {
     if (telemetry.length === 0) {
       return (
         <Sphere 
@@ -304,23 +333,33 @@ const TrajectoryPath: React.FC<{
 
   return (
     <group>
-      {/* Trajectory line */}
+      {glowGeometry && (
+        <mesh geometry={glowGeometry}>
+          <meshBasicMaterial
+            color="#ffae58"
+            transparent
+            opacity={0.18}
+            depthWrite={false}
+            blending={THREE.AdditiveBlending}
+          />
+        </mesh>
+      )}
+
       <Line
-        points={points}
+        points={curveSamples}
         color="white"
         lineWidth={2}
+        transparent
+        opacity={0.9}
         vertexColors={colors.length > 0 ? colors : undefined}
       />
-      
-      {/* Current position with enhanced indicators */}
+
       {currentPosition && (
         <group position={currentPosition}>
-          {/* Main rocket indicator */}
           <Sphere args={[2]} position={[0, 0, 0]}>
             <meshBasicMaterial color="#ff6b6b" />
           </Sphere>
-          
-          {/* Pulsing glow effect */}
+
           <Sphere args={[4]} position={[0, 0, 0]}>
             <meshBasicMaterial 
               color="#ff6b6b" 
@@ -328,8 +367,7 @@ const TrajectoryPath: React.FC<{
               opacity={0.3}
             />
           </Sphere>
-          
-          {/* Velocity vector if available */}
+
           {(() => {
             const currentFrame = getTelemetryFrame(telemetry, playbackTime);
             if (currentFrame?.velocityVector) {
@@ -340,7 +378,7 @@ const TrajectoryPath: React.FC<{
                 0,
                 vectorLength * Math.sin(direction)
               ] as [number, number, number];
-              
+
               return (
                 <Line
                   points={[[0, 0, 0], vectorEnd]}
@@ -353,8 +391,7 @@ const TrajectoryPath: React.FC<{
           })()}
         </group>
       )}
-      
-      {/* Launch site marker */}
+
       <Sphere 
         args={[1.5]} 
         position={latLngAltToVector3(FLORIDA_LAT, FLORIDA_LNG, 0)}
