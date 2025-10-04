@@ -141,35 +141,7 @@ const TelemetryGraphs: React.FC<TelemetryGraphsProps> = ({
     const timeToX = (time: number) => padding.left + (time - minTime) / (maxTime - minTime) * graphWidth;
     const valueToY = (value: number) => padding.top + graphHeight - (value - minValue) / valueRange * graphHeight;
 
-    // Draw grid (reduced density for cleaner appearance)
-    ctx.strokeStyle = theme.gridColor;
-    ctx.globalAlpha = 0.3; // Reduce grid opacity for less visual clutter
-    ctx.lineWidth = 0.5;
-    ctx.setLineDash([2, 2]);
-
-    // Vertical grid lines (time) - reduced from 10 to 5
-    for (let i = 0; i <= 5; i++) {
-      const time = minTime + (maxTime - minTime) * (i / 5);
-      const x = timeToX(time);
-      ctx.beginPath();
-      ctx.moveTo(x, padding.top);
-      ctx.lineTo(x, height - padding.bottom);
-      ctx.stroke();
-    }
-
-    // Horizontal grid lines (values) - reduced from 8 to 4
-    for (let i = 0; i <= 4; i++) {
-      const value = minValue + valueRange * (i / 4);
-      const y = valueToY(value);
-      ctx.beginPath();
-      ctx.moveTo(padding.left, y);
-      ctx.lineTo(width - padding.right, y);
-      ctx.stroke();
-    }
-
-    ctx.globalAlpha = 1.0; // Reset opacity
-
-    ctx.setLineDash([]);
+    // Grid lines removed - cleaner appearance without visual clutter
 
     // Draw axes
     ctx.strokeStyle = theme.axisColor;

@@ -49,34 +49,48 @@ const StageEventTimeline: React.FC<StageEventTimelineProps> = ({
 
       const eventLower = event.event.toLowerCase();
 
-      if (eventLower.includes('meco') || eventLower.includes('main engine cutoff')) {
+      // Exclude ALL booster return/landing events (user only wants second stage to orbit)
+      const isBoosterEvent = (
+        eventLower.includes('entry') ||
+        eventLower.includes('landing') ||
+        eventLower.includes('touchdown') ||
+        eventLower.includes('boostback') ||
+        eventLower.includes('boost back') ||
+        eventLower.includes('rtls') ||  // Return To Launch Site
+        eventLower.includes('asds') ||  // Autonomous Spaceport Drone Ship
+        (eventLower.includes('burn') && event.stageNumber === 1) ||
+        (eventLower.includes('shutdown') && event.stageNumber === 1 && !eventLower.includes('meco'))
+      );
+
+      if (isBoosterEvent) {
+        // Skip booster events entirely - user doesn't want to track booster return
+        importance = 'minor'; // Will be filtered out
+        category = 'other';
+        description = 'Booster event (excluded)';
+      } else if (eventLower.includes('liftoff') || eventLower.includes('launch') || eventLower.includes('ignition')) {
         category = 'propulsion';
         importance = 'critical';
-        description = 'Main Engine Cutoff - Primary propulsion ends';
-      } else if (eventLower.includes('seco') || eventLower.includes('second engine cutoff')) {
+        description = 'Liftoff - Launch begins';
+      } else if (eventLower.includes('meco') || eventLower.includes('main engine cutoff')) {
         category = 'propulsion';
         importance = 'critical';
-        description = 'Second Engine Cutoff - Upper stage propulsion ends';
+        description = 'MECO - First stage engines cut off';
       } else if (eventLower.includes('sep') || eventLower.includes('separation')) {
         category = 'separation';
         importance = 'critical';
-        description = 'Stage Separation - Vehicle components separate';
-      } else if (eventLower.includes('ignition') || eventLower.includes('startup')) {
+        description = 'Stage Separation - Second stage separates';
+      } else if (eventLower.includes('seco') || eventLower.includes('second engine cutoff') || (eventLower.includes('cutoff') && event.stageNumber === 2)) {
         category = 'propulsion';
-        importance = 'major';
-        description = 'Engine Ignition - Propulsion system activates';
+        importance = 'critical';
+        description = 'SECO - Second stage engine cutoff';
       } else if (eventLower.includes('deploy') || eventLower.includes('fairing')) {
         category = 'deployment';
         importance = 'major';
-        description = 'Component Deployment - Payload or structural release';
-      } else if (eventLower.includes('pitch') || eventLower.includes('roll') || eventLower.includes('yaw')) {
-        category = 'navigation';
-        importance = 'minor';
-        description = 'Vehicle Attitude Change - Flight path adjustment';
-      } else if (eventLower.includes('throttle')) {
+        description = 'Deployment - Payload or fairing release';
+      } else if (eventLower.includes('ignition') && event.stageNumber === 2) {
         category = 'propulsion';
-        importance = 'minor';
-        description = 'Throttle Adjustment - Engine power modification';
+        importance = 'major';
+        description = 'Second Stage Ignition';
       }
 
       return {
@@ -160,7 +174,7 @@ const StageEventTimeline: React.FC<StageEventTimelineProps> = ({
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">Mission Timeline</h2>
         <div className={`text-sm ${theme.textSecondary}`}>
-          {enhancedEvents.length} events • Click to jump to time
+          {enhancedEvents.length} key events • Second stage to orbit
         </div>
       </div>
 
