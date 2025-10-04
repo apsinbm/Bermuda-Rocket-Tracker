@@ -6,7 +6,7 @@
  */
 
 import React, { useRef, useEffect, useMemo, useCallback, useState } from 'react';
-import { ProcessedSimulationData, EnhancedTelemetryFrame, StageEvent } from '../services/flightClubApiService';
+import { ProcessedSimulationData } from '../services/flightClubApiService';
 
 interface TelemetryGraphsProps {
   simulationData: ProcessedSimulationData;
@@ -36,7 +36,6 @@ const TelemetryGraphs: React.FC<TelemetryGraphsProps> = ({
   const elevationCanvasRef = useRef<HTMLCanvasElement>(null);
   
   const [hoveredGraph, setHoveredGraph] = useState<string | null>(null);
-  const [hoveredPoint, setHoveredPoint] = useState<{ x: number; y: number; value: string } | null>(null);
 
   const { enhancedTelemetry, stageEvents } = simulationData;
 
@@ -142,14 +141,15 @@ const TelemetryGraphs: React.FC<TelemetryGraphsProps> = ({
     const timeToX = (time: number) => padding.left + (time - minTime) / (maxTime - minTime) * graphWidth;
     const valueToY = (value: number) => padding.top + graphHeight - (value - minValue) / valueRange * graphHeight;
 
-    // Draw grid
+    // Draw grid (reduced density for cleaner appearance)
     ctx.strokeStyle = theme.gridColor;
-    ctx.lineWidth = 1;
+    ctx.globalAlpha = 0.3; // Reduce grid opacity for less visual clutter
+    ctx.lineWidth = 0.5;
     ctx.setLineDash([2, 2]);
 
-    // Vertical grid lines (time)
-    for (let i = 0; i <= 10; i++) {
-      const time = minTime + (maxTime - minTime) * (i / 10);
+    // Vertical grid lines (time) - reduced from 10 to 5
+    for (let i = 0; i <= 5; i++) {
+      const time = minTime + (maxTime - minTime) * (i / 5);
       const x = timeToX(time);
       ctx.beginPath();
       ctx.moveTo(x, padding.top);
@@ -157,15 +157,17 @@ const TelemetryGraphs: React.FC<TelemetryGraphsProps> = ({
       ctx.stroke();
     }
 
-    // Horizontal grid lines (values)
-    for (let i = 0; i <= 8; i++) {
-      const value = minValue + valueRange * (i / 8);
+    // Horizontal grid lines (values) - reduced from 8 to 4
+    for (let i = 0; i <= 4; i++) {
+      const value = minValue + valueRange * (i / 4);
       const y = valueToY(value);
       ctx.beginPath();
       ctx.moveTo(padding.left, y);
       ctx.lineTo(width - padding.right, y);
       ctx.stroke();
     }
+
+    ctx.globalAlpha = 1.0; // Reset opacity
 
     ctx.setLineDash([]);
 
@@ -193,20 +195,20 @@ const TelemetryGraphs: React.FC<TelemetryGraphsProps> = ({
     ctx.fillText(dataset.yAxisLabel, 0, 0);
     ctx.restore();
 
-    // Draw tick labels
+    // Draw tick labels (reduced to match grid lines)
     ctx.font = '12px -apple-system, BlinkMacSystemFont, sans-serif';
-    
-    // X-axis ticks
-    for (let i = 0; i <= 10; i++) {
-      const time = minTime + (maxTime - minTime) * (i / 10);
+
+    // X-axis ticks (reduced from 10 to 5)
+    for (let i = 0; i <= 5; i++) {
+      const time = minTime + (maxTime - minTime) * (i / 5);
       const x = timeToX(time);
       ctx.textAlign = 'center';
       ctx.fillText(Math.round(time).toString(), x, height - padding.bottom + 20);
     }
 
-    // Y-axis ticks
-    for (let i = 0; i <= 8; i++) {
-      const value = minValue + valueRange * (i / 8);
+    // Y-axis ticks (reduced from 8 to 4)
+    for (let i = 0; i <= 4; i++) {
+      const value = minValue + valueRange * (i / 4);
       const y = valueToY(value);
       ctx.textAlign = 'right';
       const formattedValue = value < 1000 ? value.toFixed(1) : (value / 1000).toFixed(1) + 'k';
@@ -260,18 +262,16 @@ const TelemetryGraphs: React.FC<TelemetryGraphsProps> = ({
     if (graphId === 'elevation' && dataset.data.length > 0) {
       ctx.fillStyle = theme.visibilityColor + '20'; // 20% opacity
       ctx.beginPath();
-      
+
       let inVisibleZone = false;
-      let visibleStartX = 0;
-      
+
       dataset.data.forEach((point, index) => {
         const x = timeToX(point.x);
         const y = valueToY(point.y);
-        
+
         if (point.y > 0 && !inVisibleZone) {
           // Start of visible zone
           inVisibleZone = true;
-          visibleStartX = x;
           ctx.moveTo(x, height - padding.bottom);
           ctx.lineTo(x, y);
         } else if (point.y > 0 && inVisibleZone) {

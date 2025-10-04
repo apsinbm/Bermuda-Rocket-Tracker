@@ -48,7 +48,7 @@ const StageEventTimeline: React.FC<StageEventTimelineProps> = ({
       let description = '';
 
       const eventLower = event.event.toLowerCase();
-      
+
       if (eventLower.includes('meco') || eventLower.includes('main engine cutoff')) {
         category = 'propulsion';
         importance = 'critical';
@@ -87,7 +87,9 @@ const StageEventTimeline: React.FC<StageEventTimelineProps> = ({
         importance,
         description
       } as EnhancedStageEvent;
-    }).sort((a, b) => a.time - b.time);
+    })
+    .sort((a, b) => a.time - b.time)
+    .filter(event => event.importance === 'critical' || event.importance === 'major'); // Show only critical and major events
   }, [stageEvents, enhancedTelemetry]);
 
   // Timeline scale
