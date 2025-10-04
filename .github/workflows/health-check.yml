@@ -67,20 +67,19 @@ jobs:
           fi
 
           # Try to find main JS bundle path
-          main_js_path=$(python3 - <<'PYCODE' || true
+          main_js_path=$(python3 -c '
 import json
 import sys
 
 try:
-    with open('manifest.json', 'r', encoding='utf-8') as f:
+    with open("manifest.json", "r", encoding="utf-8") as f:
         manifest = json.load(f)
 
-    # Try different manifest formats
-    main_js = manifest.get('files', {}).get('main.js')
+    main_js = manifest.get("files", {}).get("main.js")
 
-    if not main_js and 'entrypoints' in manifest:
-        for entry in manifest.get('entrypoints', []):
-            if isinstance(entry, str) and entry.endswith('.js') and 'main' in entry:
+    if not main_js and "entrypoints" in manifest:
+        for entry in manifest.get("entrypoints", []):
+            if isinstance(entry, str) and entry.endswith(".js") and "main" in entry:
                 main_js = entry
                 break
 
@@ -91,10 +90,9 @@ try:
         sys.exit(1)
 
 except Exception as e:
-    print(f"Error: {e}", file=sys.stderr)
+    print("Error: " + str(e), file=sys.stderr)
     sys.exit(1)
-PYCODE
-          )
+' 2>/dev/null || true)
 
           if [ -z "$main_js_path" ]; then
             echo "⚠️ Unable to locate main bundle in asset manifest - skipping size check"

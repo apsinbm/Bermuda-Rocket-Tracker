@@ -54,91 +54,82 @@ export class WeatherService {
   private static readonly BERMUDA_LNG = -64.7505;
   private static readonly CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
   
-  // OpenWeatherMap API configuration
-  private static readonly OPENWEATHER_API_KEY = process.env.REACT_APP_OPENWEATHER_API_KEY;
-  private static readonly OPENWEATHER_BASE_URL = 'https://api.openweathermap.org/data/2.5';
+  // Open-Meteo API configuration (Free, no API key required)
+  private static readonly OPEN_METEO_BASE_URL = 'https://api.open-meteo.com/v1';
 
   static async getCurrentWeather(): Promise<WeatherData> {
     const cached = this.getCachedWeather();
     if (cached) return cached;
 
-    // Try to fetch real weather data, fallback to simulation if unavailable
+    // Try to fetch real weather data from Open-Meteo, fallback to simulation if unavailable
     let weatherData: WeatherData;
-    
-    if (this.OPENWEATHER_API_KEY) {
-      try {
-        weatherData = await this.fetchRealWeatherData();
-      } catch (error) {
-        console.warn('[Weather] Failed to fetch real weather data, falling back to simulation:', error);
-        weatherData = this.generateRealisticWeatherData();
-      }
-    } else {
+
+    try {
+      weatherData = await this.fetchRealWeatherData();
+    } catch (error) {
+      console.warn('[Weather] Failed to fetch real weather data from Open-Meteo, falling back to simulation:', error);
       weatherData = this.generateRealisticWeatherData();
     }
-    
+
     this.cacheWeatherData(weatherData);
     return weatherData;
   }
 
+  /**
+   * Map WMO Weather Code to condition string
+   * @see https://open-meteo.com/en/docs
+   */
+  private static mapWMOCode(code: number): { condition: string; icon: string } {
+    if (code === 0) return { condition: 'Clear', icon: '☀️' };
+    if (code === 1) return { condition: 'Mostly Clear', icon: '🌤️' };
+    if (code === 2) return { condition: 'Partly Cloudy', icon: '⛅' };
+    if (code === 3) return { condition: 'Cloudy', icon: '☁️' };
+    if (code >= 45 && code <= 48) return { condition: 'Fog', icon: '🌫️' };
+    if (code >= 51 && code <= 55) return { condition: 'Drizzle', icon: '🌦️' };
+    if (code >= 56 && code <= 57) return { condition: 'Freezing Drizzle', icon: '🌧️' };
+    if (code >= 61 && code <= 65) return { condition: 'Rain', icon: '🌧️' };
+    if (code >= 66 && code <= 67) return { condition: 'Freezing Rain', icon: '🌨️' };
+    if (code >= 71 && code <= 75) return { condition: 'Snow', icon: '❄️' };
+    if (code === 77) return { condition: 'Snow Grains', icon: '❄️' };
+    if (code >= 80 && code <= 82) return { condition: 'Rain Showers', icon: '🌧️' };
+    if (code >= 85 && code <= 86) return { condition: 'Snow Showers', icon: '🌨️' };
+    if (code === 95) return { condition: 'Thunderstorm', icon: '⛈️' };
+    if (code >= 96 && code <= 99) return { condition: 'Thunderstorm with Hail', icon: '⛈️' };
+    return { condition: 'Unknown', icon: '☀️' };
+  }
+
   private static async fetchRealWeatherData(): Promise<WeatherData> {
-    const url = `${this.OPENWEATHER_BASE_URL}/weather?lat=${this.BERMUDA_LAT}&lon=${this.BERMUDA_LNG}&appid=${this.OPENWEATHER_API_KEY}&units=metric`;
-    
+    const params = new URLSearchParams({
+      latitude: this.BERMUDA_LAT.toString(),
+      longitude: this.BERMUDA_LNG.toString(),
+      current: 'temperature_2m,relative_humidity_2m,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,visibility',
+      timezone: 'Atlantic/Bermuda'
+    });
+
+    const url = `${this.OPEN_METEO_BASE_URL}/forecast?${params.toString()}`;
+
     const response = await fetch(url);
     if (!response.ok) {
-      throw new Error(`OpenWeatherMap API error: ${response.status} ${response.statusText}`);
+      throw new Error(`Open-Meteo API error: ${response.status} ${response.statusText}`);
     }
-    
+
     const data = await response.json();
-    
+    const current = data.current;
+    const weatherInfo = this.mapWMOCode(current.weather_code);
+
     return {
       current: {
-        temperature: Math.round(data.main.temp),
-        humidity: data.main.humidity,
-        cloudCover: data.clouds.all,
-        visibility: Math.round((data.visibility || 10000) / 1000), // Convert meters to km
-        windSpeed: Math.round(data.wind.speed * 3.6), // Convert m/s to km/h
-        windDirection: data.wind.deg || 0,
-        condition: this.mapOpenWeatherCondition(data.weather[0].main, data.weather[0].description),
-        icon: this.mapOpenWeatherIcon(data.weather[0].icon, data.dt, data.sunrise, data.sunset)
+        temperature: Math.round(current.temperature_2m),
+        humidity: current.relative_humidity_2m,
+        cloudCover: current.cloud_cover,
+        visibility: Math.round((current.visibility || 10000) / 1000), // Convert meters to km
+        windSpeed: Math.round(current.wind_speed_10m), // Already in km/h
+        windDirection: current.wind_direction_10m || 0,
+        condition: weatherInfo.condition,
+        icon: weatherInfo.icon
       },
-      forecast: [] // Extended forecast would require additional API call
+      forecast: [] // Extended forecast available but not currently implemented
     };
-  }
-
-  private static mapOpenWeatherCondition(main: string, description: string): string {
-    const conditionMap: { [key: string]: string } = {
-      'Clear': 'Clear',
-      'Clouds': description.includes('few') ? 'Mostly Clear' : 
-               description.includes('scattered') ? 'Partly Cloudy' :
-               description.includes('broken') ? 'Mostly Cloudy' : 'Overcast',
-      'Rain': 'Light Rain',
-      'Drizzle': 'Drizzle',
-      'Thunderstorm': 'Thunderstorms',
-      'Snow': 'Snow',
-      'Mist': 'Misty',
-      'Fog': 'Foggy'
-    };
-    
-    return conditionMap[main] || description.charAt(0).toUpperCase() + description.slice(1);
-  }
-
-  private static mapOpenWeatherIcon(iconCode: string, currentTime: number, sunrise: number, sunset: number): string {
-    const isDay = currentTime >= sunrise && currentTime <= sunset;
-    
-    // Map OpenWeatherMap icons to emoji
-    const iconMap: { [key: string]: string } = {
-      '01d': '☀️', '01n': '🌙',  // clear sky
-      '02d': '⛅', '02n': '☁️',  // few clouds
-      '03d': '☁️', '03n': '☁️',  // scattered clouds
-      '04d': '☁️', '04n': '☁️',  // broken clouds
-      '09d': '🌧️', '09n': '🌧️', // shower rain
-      '10d': '🌦️', '10n': '🌦️', // rain
-      '11d': '⛈️', '11n': '⛈️',  // thunderstorm
-      '13d': '❄️', '13n': '❄️',  // snow
-      '50d': '🌫️', '50n': '🌫️'  // mist
-    };
-    
-    return iconMap[iconCode] || (isDay ? '☀️' : '🌙');
   }
 
   static async getWeatherForLaunch(launchTime: Date): Promise<LaunchWeatherAssessment> {

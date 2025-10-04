@@ -44,10 +44,10 @@ export const apiConfig = {
     timeout: config.apiTimeout,
     retryAttempts: config.apiRetryAttempts,
   },
-  openWeatherApi: {
-    baseUrl: 'https://api.openweathermap.org/data/2.5',
-    apiKey: process.env.REACT_APP_OPENWEATHER_API_KEY,
+  openMeteoApi: {
+    baseUrl: 'https://api.open-meteo.com/v1',
     timeout: config.apiTimeout,
+    // No API key required - Open-Meteo is completely free
   },
 };
 

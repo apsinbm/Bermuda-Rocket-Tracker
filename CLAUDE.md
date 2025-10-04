@@ -375,10 +375,9 @@ FLIGHTCLUB_API_KEY=your_flight_club_api_key_here
 # Required for production rate limiting (get free instance at upstash.com)
 UPSTASH_REDIS_REST_URL=your_upstash_redis_url_here
 UPSTASH_REDIS_REST_TOKEN=your_upstash_redis_token_here
-
-# Optional: Weather API key (get free key at openweathermap.org)
-REACT_APP_OPENWEATHER_API_KEY=your_openweathermap_api_key_here
 ```
+
+**Weather API:** App now uses Open-Meteo (https://open-meteo.com) - **completely free with no API key or registration required**. Real-time weather data is fetched automatically for Bermuda.
 
 **SECURITY NOTE**: Never commit actual API keys to version control. Use environment-specific configuration management.
 
