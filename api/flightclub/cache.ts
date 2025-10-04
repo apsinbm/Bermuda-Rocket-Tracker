@@ -50,9 +50,13 @@ export const isRedisEnabled = Boolean(redis);
 
 export async function getCachedMissions(): Promise<MissionCacheEntry | null> {
   if (redis) {
-    const cached = await redis.get<MissionCacheEntry>(MISSION_CACHE_KEY);
-    if (cached) {
-      return cached;
+    try {
+      const cached = await redis.get<MissionCacheEntry>(MISSION_CACHE_KEY);
+      if (cached) {
+        return cached;
+      }
+    } catch (error) {
+      console.warn('[FlightClubCache] Redis get failed, using memory cache:', error);
     }
   }
 
@@ -61,7 +65,11 @@ export async function getCachedMissions(): Promise<MissionCacheEntry | null> {
 
 export async function setCachedMissions(entry: MissionCacheEntry): Promise<void> {
   if (redis) {
-    await redis.set(MISSION_CACHE_KEY, entry, { ex: SIX_HOURS_SECONDS });
+    try {
+      await redis.set(MISSION_CACHE_KEY, entry, { ex: SIX_HOURS_SECONDS });
+    } catch (error) {
+      console.warn('[FlightClubCache] Redis set failed, using memory cache only:', error);
+    }
   }
 
   memoryCache.missions = entry;
@@ -69,9 +77,13 @@ export async function setCachedMissions(entry: MissionCacheEntry): Promise<void>
 
 export async function getCachedSimulation(missionId: string): Promise<SimulationCacheEntry | null> {
   if (redis) {
-    const cached = await redis.get<SimulationCacheEntry>(SIMULATION_CACHE_PREFIX + missionId);
-    if (cached) {
-      return cached;
+    try {
+      const cached = await redis.get<SimulationCacheEntry>(SIMULATION_CACHE_PREFIX + missionId);
+      if (cached) {
+        return cached;
+      }
+    } catch (error) {
+      console.warn('[FlightClubCache] Redis get failed for simulation, using memory cache:', error);
     }
   }
 
@@ -80,7 +92,11 @@ export async function getCachedSimulation(missionId: string): Promise<Simulation
 
 export async function setCachedSimulation(missionId: string, entry: SimulationCacheEntry, ttlSeconds: number = THIRTY_DAYS_SECONDS): Promise<void> {
   if (redis) {
-    await redis.set(SIMULATION_CACHE_PREFIX + missionId, entry, { ex: ttlSeconds });
+    try {
+      await redis.set(SIMULATION_CACHE_PREFIX + missionId, entry, { ex: ttlSeconds });
+    } catch (error) {
+      console.warn('[FlightClubCache] Redis set failed for simulation, using memory cache only:', error);
+    }
   }
 
   memoryCache.simulations.set(missionId, entry);
@@ -88,9 +104,13 @@ export async function setCachedSimulation(missionId: string, entry: SimulationCa
 
 export async function getLaunchMetadata(launchId: string): Promise<LaunchCacheMetadata | null> {
   if (redis) {
-    const cached = await redis.get<LaunchCacheMetadata>(METADATA_CACHE_PREFIX + launchId);
-    if (cached) {
-      return cached;
+    try {
+      const cached = await redis.get<LaunchCacheMetadata>(METADATA_CACHE_PREFIX + launchId);
+      if (cached) {
+        return cached;
+      }
+    } catch (error) {
+      console.warn('[FlightClubCache] Redis get failed for metadata, using memory cache:', error);
     }
   }
 
@@ -99,7 +119,11 @@ export async function getLaunchMetadata(launchId: string): Promise<LaunchCacheMe
 
 export async function setLaunchMetadata(meta: LaunchCacheMetadata): Promise<void> {
   if (redis) {
-    await redis.set(METADATA_CACHE_PREFIX + meta.launchId, meta, { ex: THIRTY_DAYS_SECONDS });
+    try {
+      await redis.set(METADATA_CACHE_PREFIX + meta.launchId, meta, { ex: THIRTY_DAYS_SECONDS });
+    } catch (error) {
+      console.warn('[FlightClubCache] Redis set failed for metadata, using memory cache only:', error);
+    }
   }
 
   memoryCache.meta.set(meta.launchId, meta);
@@ -107,7 +131,11 @@ export async function setLaunchMetadata(meta: LaunchCacheMetadata): Promise<void
 
 export async function removeLaunchMetadata(launchId: string): Promise<void> {
   if (redis) {
-    await redis.del(METADATA_CACHE_PREFIX + launchId);
+    try {
+      await redis.del(METADATA_CACHE_PREFIX + launchId);
+    } catch (error) {
+      console.warn('[FlightClubCache] Redis delete failed for metadata, using memory cache only:', error);
+    }
   }
 
   memoryCache.meta.delete(launchId);
