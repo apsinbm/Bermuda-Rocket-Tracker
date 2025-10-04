@@ -36,7 +36,7 @@
         },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' blob:; worker-src 'self' blob:; child-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://flightclub.io https://www.spacelaunchschedule.com; connect-src 'self' https://ll.thespacedevs.com https://api.openweathermap.org https://flightclub.io https://www.spacelaunchschedule.com https://api.sunrise-sunset.org https://aa.usno.navy.mil; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+          "value": "default-src 'self'; script-src 'self' 'unsafe-eval' blob:; worker-src 'self' blob:; child-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://flightclub.io https://www.spacelaunchschedule.com; connect-src 'self' ws: wss: https://ll.thespacedevs.com https://api.openweathermap.org https://api.open-meteo.com https://flightclub.io https://www.spacelaunchschedule.com https://api.sunrise-sunset.org https://aa.usno.navy.mil https://bermuda-rocket-tracker.vercel.app; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
         },
         {
           "key": "Cross-Origin-Opener-Policy",
@@ -61,7 +61,7 @@
   ],
   "rewrites": [
     {
-      "source": "/((?!api/).*)",
+      "source": "/((?!api/|static/).*)",
       "destination": "/index.html"
     }
   ],
