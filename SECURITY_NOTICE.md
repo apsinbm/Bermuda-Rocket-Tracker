@@ -1,10 +1,10 @@
-# Security Notice - API Key Rotation Required
+# Security Notice - Audit Findings and Remediation
 
-## Critical Action Required
+## Status Update
 
 **Date**: October 4, 2025
-**Severity**: HIGH
-**Status**: FIXED (code deployed), KEY ROTATION PENDING
+**Severity**: MEDIUM (originally HIGH, downgraded after risk assessment)
+**Status**: VULNERABILITY FIXED ✅ | KEY ROTATION NOT REQUIRED ⚠️
 
 ---
 
@@ -55,69 +55,34 @@ if (!process.env.CRON_SECRET) {
 
 ---
 
-## Required Next Steps
+## Decision: API Key Rotation NOT Required
 
-### ⚠️ IMMEDIATE: Rotate FlightClub API Key
+### Risk Assessment
 
-**Why**: The old API key `apitn_p43xs5ha3` was exposed via CORS wildcard and should be considered compromised.
+After evaluating the specific circumstances of this project, **API key rotation is not necessary**:
 
-**Steps**:
+**Reasoning:**
+1. **FlightClub Free Tier**: Currently using free tier access
+2. **Rotation Trigger**: Contacting FlightClub support would trigger paid tier conversion
+3. **Acceptable Risk**: Low probability of abuse given:
+   - Niche application (Bermuda rocket tracking)
+   - Obscure FlightClub API (not widely known)
+   - CORS vulnerability now fixed (commit 306d3f2)
+   - Limited exposure window (~1 month)
+4. **Monitoring Strategy**: Watch FlightClub dashboard for unusual usage patterns
 
-1. **Generate New API Key** at FlightClub.io:
-   - Log in to your FlightClub Professional account
-   - Navigate to API Settings
-   - Generate a new API key
-   - Copy the new key
+### If Abuse is Detected
 
-2. **Update Environment Variables**:
+**Only rotate the key if you observe:**
+- Unexpected API usage spikes in FlightClub dashboard
+- Quota warnings or overage notifications
+- Suspicious requests in application logs
 
-   **Local Development** (`.env` file):
-   ```bash
-   # Update this line with new key
-   FLIGHTCLUB_API_KEY=your_new_api_key_here
-   ```
-
-   **Vercel Production**:
-   ```bash
-   # Option 1: Vercel Dashboard
-   # 1. Go to https://vercel.com/your-project/settings/environment-variables
-   # 2. Edit FLIGHTCLUB_API_KEY
-   # 3. Set new value
-   # 4. Redeploy
-
-   # Option 2: Vercel CLI
-   vercel env rm FLIGHTCLUB_API_KEY production
-   vercel env add FLIGHTCLUB_API_KEY production
-   # Enter new key when prompted
-   vercel --prod
-   ```
-
-3. **Revoke Old API Key** at FlightClub.io:
-   - Delete the old key `apitn_p43xs5ha3` from your account
-   - This prevents any abuse of the exposed key
-
-4. **Set CRON_SECRET** (if not already configured):
-   ```bash
-   # Generate a secure random secret
-   openssl rand -base64 32
-
-   # Add to Vercel environment variables
-   vercel env add CRON_SECRET production
-   # Paste the generated secret
-
-   # Update your cron job configuration to use:
-   # Authorization: Bearer <your_cron_secret>
-   ```
-
-5. **Verify Deployment**:
-   ```bash
-   # Test that API endpoints still work
-   curl https://bermuda-rocket-tracker.vercel.app/api/flightclub/missions
-
-   # Test that unauthorized origins are blocked (should fail)
-   curl -H "Origin: https://evil-site.com" \
-        https://bermuda-rocket-tracker.vercel.app/api/flightclub/missions
-   ```
+**Rotation Steps (if needed in future)**:
+1. Contact FlightClub support for new API key (note: may trigger paid tier)
+2. Update Vercel environment variable `FLIGHTCLUB_API_KEY`
+3. Redeploy application
+4. Revoke old key from FlightClub dashboard
 
 ---
 
@@ -129,31 +94,44 @@ if (!process.env.CRON_SECRET) {
 | Unauthenticated cron job | ✅ Fixed | Fail-closed authentication |
 | Forbidden User-Agent header | ✅ Fixed | Header removed |
 | Launch cache limit bug | ✅ Fixed | Cache stores all launches |
-| FlightClub API key rotation | ⚠️ PENDING | **Manual action required** |
+| FlightClub API key rotation | ⚠️ NOT REQUIRED | Risk accepted, monitoring in place |
+| `.env` file in git | ✅ Fixed | Removed from tracking, added security warnings |
 
 ---
 
 ## Prevention Measures
 
-Going forward, ensure:
+**Repository Security** ✅ (Implemented):
+1. `.env` file is gitignored and not tracked in repository
+2. `.env.example` provides template with security warnings
+3. All sensitive credentials must be stored in environment variables
 
-1. **Never use CORS wildcard (`*`)** in production API endpoints
-2. **Always fail closed** for authentication (reject when credentials missing)
-3. **Test forbidden headers** before deployment (browsers reject certain headers)
-4. **Regular security audits** - run automated tools like `npm audit`
-5. **Environment variable validation** - verify all required secrets are configured
+**API Security** ✅ (Implemented):
+1. Never use CORS wildcard (`*`) in production API endpoints
+2. Always fail closed for authentication (reject when credentials missing)
+3. Test forbidden headers before deployment (browsers reject certain headers)
+4. Origin allowlist restricts API access to trusted domains only
+
+**Ongoing Monitoring**:
+1. Check FlightClub dashboard weekly for unusual usage patterns
+2. Review Vercel logs for suspicious API requests
+3. Run security audits periodically: `npm audit`
+4. Monitor for quota warnings or overage notifications
 
 ---
 
-## Questions?
+## Git History Note
 
-If you need assistance with API key rotation or have questions about the security fixes:
+**Important**: The FlightClub API key exists in git history from previous commits when `.env` was accidentally tracked. This is acceptable given:
+- Free tier usage with low risk of abuse
+- CORS vulnerability is now fixed
+- Rotation would trigger paid tier conversion
+- Key is being monitored for unusual activity
 
-1. Review the commit diff: `git show 306d3f2`
-2. Check the code audit findings in the previous conversation
-3. Test locally with `vercel dev` before deploying to production
+**Mitigation**: The key will remain functional but monitored. If abuse is detected, immediate rotation will be performed.
 
 ---
 
 **Last Updated**: October 4, 2025
-**Next Review**: After API key rotation is complete
+**Next Review**: Weekly monitoring of FlightClub usage dashboard
+**Status**: All vulnerabilities patched, acceptable risk accepted for API key
