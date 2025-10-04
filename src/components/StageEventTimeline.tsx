@@ -1,8 +1,8 @@
 /**
  * Stage Event Timeline Component
- * 
- * Professional timeline showing mission events like MECO, stage separation, etc.
- * Replicates FlightClub's event timeline interface
+ *
+ * Professional timeline showing critical mission events (second stage focus)
+ * Shows launch to orbit journey, excludes booster return events
  */
 
 import React, { useMemo, useState } from 'react';

@@ -377,10 +377,10 @@ const TelemetryGraphs: React.FC<TelemetryGraphsProps> = ({
     <div className={`space-y-6 p-4 ${darkMode ? 'bg-gray-900' : 'bg-gray-50'} rounded-lg`}>
       <div className="text-center">
         <h2 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-gray-800'} mb-2`}>
-          FlightClub Telemetry Analytics
+          Telemetry Graphs
         </h2>
         <div className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-          {enhancedTelemetry.length} telemetry data points • Click graphs to seek playback time
+          Click any graph to jump to that time • High-resolution trajectory data
         </div>
       </div>
 
@@ -391,7 +391,7 @@ const TelemetryGraphs: React.FC<TelemetryGraphsProps> = ({
             ref={altitudeCanvasRef}
             width={600}
             height={300}
-            className="w-full h-auto border border-gray-300 dark:border-gray-600 rounded cursor-crosshair hover:border-green-400 transition-colors"
+            className="w-full h-auto rounded cursor-crosshair"
             onClick={(e) => datasets.altitude && handleCanvasClick(e, datasets.altitude)}
             onMouseEnter={() => setHoveredGraph('altitude')}
             onMouseLeave={() => setHoveredGraph(null)}
@@ -407,7 +407,7 @@ const TelemetryGraphs: React.FC<TelemetryGraphsProps> = ({
             ref={speedCanvasRef}
             width={600}
             height={300}
-            className="w-full h-auto border border-gray-300 dark:border-gray-600 rounded cursor-crosshair hover:border-red-400 transition-colors"
+            className="w-full h-auto rounded cursor-crosshair"
             onClick={(e) => datasets.speed && handleCanvasClick(e, datasets.speed)}
             onMouseEnter={() => setHoveredGraph('speed')}
             onMouseLeave={() => setHoveredGraph(null)}
@@ -423,7 +423,7 @@ const TelemetryGraphs: React.FC<TelemetryGraphsProps> = ({
             ref={distanceCanvasRef}
             width={600}
             height={300}
-            className="w-full h-auto border border-gray-300 dark:border-gray-600 rounded cursor-crosshair hover:border-blue-400 transition-colors"
+            className="w-full h-auto rounded cursor-crosshair"
             onClick={(e) => datasets.distance && handleCanvasClick(e, datasets.distance)}
             onMouseEnter={() => setHoveredGraph('distance')}
             onMouseLeave={() => setHoveredGraph(null)}
@@ -439,7 +439,7 @@ const TelemetryGraphs: React.FC<TelemetryGraphsProps> = ({
             ref={elevationCanvasRef}
             width={600}
             height={300}
-            className="w-full h-auto border border-gray-300 dark:border-gray-600 rounded cursor-crosshair hover:border-yellow-400 transition-colors"
+            className="w-full h-auto rounded cursor-crosshair"
             onClick={(e) => datasets.elevation && handleCanvasClick(e, datasets.elevation)}
             onMouseEnter={() => setHoveredGraph('elevation')}
             onMouseLeave={() => setHoveredGraph(null)}

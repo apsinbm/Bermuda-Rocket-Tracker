@@ -643,7 +643,7 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
         <div>
           <h2 className="text-2xl font-bold mb-1">FlightClub Trajectory Analysis</h2>
           <div className={`text-sm ${themeClasses.textSecondary}`}>
-            {flightClubMission?.description} • {simulationData.enhancedTelemetry.length} telemetry points
+            {flightClubMission?.description}
           </div>
         </div>
         
