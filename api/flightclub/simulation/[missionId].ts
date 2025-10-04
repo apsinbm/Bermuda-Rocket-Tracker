@@ -122,19 +122,25 @@ function calculateVisibility(distance: number, altitude: number): { aboveHorizon
 // Detect stage events from velocity changes
 function detectStageEvents(telemetry: EnhancedTelemetryFrame[]): Array<{ time: number; event: string; stageNumber: number; description?: string; engineType?: 'Merlin' | 'MVac' | 'Unknown' }> {
   const events: Array<{ time: number; event: string; stageNumber: number; description?: string; engineType?: 'Merlin' | 'MVac' | 'Unknown' }> = [];
-  
+
+  // Track detected events to prevent duplicates
+  // Map of event type -> last time detected
+  const detectedEvents = new Map<string, number>();
+  const MIN_EVENT_GAP = 30; // Minimum 30 seconds between events of same type
+
   let stageTransitionTime = 0; // Track when stage separation occurs
-  
+
   for (let i = 1; i < telemetry.length; i++) {
     const current = telemetry[i];
     const previous = telemetry[i - 1];
-    
+
     // Stage separation detection: significant speed drop or altitude/speed inflection
     const speedChange = (current.speed - previous.speed) / previous.speed;
     const timeGap = current.time - previous.time;
-    
+
     // Stage separation (stage number change) - Track this first
-    if (current.stageNumber !== previous.stageNumber) {
+    // Only detect once when stage number actually changes
+    if (current.stageNumber !== previous.stageNumber && !detectedEvents.has('Stage Separation')) {
       stageTransitionTime = current.time;
       events.push({
         time: current.time,
@@ -142,10 +148,13 @@ function detectStageEvents(telemetry: EnhancedTelemetryFrame[]): Array<{ time: n
         stageNumber: previous.stageNumber,
         description: 'First stage separation from second stage'
       });
+      detectedEvents.set('Stage Separation', current.time);
     }
-    
+
     // MECO detection (Merlin engines - first stage)
-    if (speedChange < -0.1 && current.time > 60 && current.time < 200 && current.stageNumber === 1) {
+    // Only detect once, prevent hundreds of duplicate MECO events
+    const lastMecoTime = detectedEvents.get('MECO') ?? -Infinity;
+    if (speedChange < -0.1 && current.time > 60 && current.time < 200 && current.stageNumber === 1 && (current.time - lastMecoTime) > MIN_EVENT_GAP) {
       events.push({
         time: current.time,
         event: 'MECO',
@@ -153,30 +162,36 @@ function detectStageEvents(telemetry: EnhancedTelemetryFrame[]): Array<{ time: n
         description: 'Main Engine Cutoff (Merlin engines)',
         engineType: 'Merlin'
       });
+      detectedEvents.set('MECO', current.time);
     }
-    
+
     // SECO detection (MVac engine - second stage)
     // Look for velocity plateau or significant speed decrease after stage separation
     if (current.stageNumber === 2 && stageTransitionTime > 0 && current.time > stageTransitionTime + 30) {
       const velocityPlateauReached = Math.abs(speedChange) < 0.01 && current.speed > 7000; // Near orbital velocity
       const significantSpeedDrop = speedChange < -0.05;
-      
+
       if (velocityPlateauReached || significantSpeedDrop) {
-        // Determine if this is first or subsequent SECO
+        // Check if we've already detected this SECO type recently
         const existingSecoCount = events.filter(e => e.event.includes('SECO')).length;
         const secoEvent = existingSecoCount === 0 ? 'SECO-1' : 'SECO-2';
-        
-        events.push({
-          time: current.time,
-          event: secoEvent,
-          stageNumber: 2,
-          description: `Second Engine Cutoff (MVac engine)${existingSecoCount === 0 ? ' - End of visibility window' : ' - Engine restart'}`,
-          engineType: 'MVac'
-        });
+        const lastSecoTime = detectedEvents.get(secoEvent) ?? -Infinity;
+
+        // Only add if we haven't detected this SECO type recently
+        if ((current.time - lastSecoTime) > MIN_EVENT_GAP) {
+          events.push({
+            time: current.time,
+            event: secoEvent,
+            stageNumber: 2,
+            description: `Second Engine Cutoff (MVac engine)${existingSecoCount === 0 ? ' - End of visibility window' : ' - Engine restart'}`,
+            engineType: 'MVac'
+          });
+          detectedEvents.set(secoEvent, current.time);
+        }
       }
     }
   }
-  
+
   return events;
 }
 

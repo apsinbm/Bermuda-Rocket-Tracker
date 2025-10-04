@@ -83,9 +83,6 @@ const FlightClub2DVisualization: React.FC<FlightClub2DVisualizationProps> = ({
             
             <div className="mt-6 text-center">
               <div className={`text-xs ${theme.textSecondary}`}>
-                {enhancedTelemetry.length} telemetry data points loaded
-              </div>
-              <div className={`text-xs ${theme.textSecondary} mt-1`}>
                 Professional 2D visualization coming soon
               </div>
             </div>
