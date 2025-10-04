@@ -6,6 +6,19 @@
 
 import { Launch, LaunchWithFlightClub, VisibilityData, LaunchMatch } from '../types';
 
+const INDEXED_DB_SUPPORTED = typeof indexedDB !== 'undefined';
+
+const warnIndexedDBUnavailable = (() => {
+  let warned = false;
+  return () => {
+    if (!INDEXED_DB_SUPPORTED && !warned) {
+      // eslint-disable-next-line no-console
+      console.warn('[IndexedDBCache] IndexedDB is not available in this environment. Falling back to in-memory caching.');
+      warned = true;
+    }
+  };
+})();
+
 // Cache configuration
 const DB_NAME = 'BermudaRocketTrackerCache';
 const DB_VERSION = 2;
@@ -91,6 +104,11 @@ class IndexedDBCacheService {
    * Initialize the IndexedDB database
    */
   private async initDB(): Promise<IDBDatabase> {
+    if (!INDEXED_DB_SUPPORTED) {
+      warnIndexedDBUnavailable();
+      throw new Error('IndexedDB is not supported in this environment');
+    }
+
     if (this.db) {
       return this.db;
     }
@@ -152,6 +170,11 @@ class IndexedDBCacheService {
    * Generic method to get data from a store
    */
   private async get<T>(storeName: string, key: string): Promise<T | null> {
+    if (!INDEXED_DB_SUPPORTED) {
+      warnIndexedDBUnavailable();
+      return null;
+    }
+
     try {
       const db = await this.initDB();
       const transaction = db.transaction([storeName, STORES.CACHE_METADATA], 'readwrite');
@@ -201,6 +224,11 @@ class IndexedDBCacheService {
     data: T, 
     ttlMs?: number
   ): Promise<void> {
+    if (!INDEXED_DB_SUPPORTED) {
+      warnIndexedDBUnavailable();
+      return;
+    }
+
     try {
       const db = await this.initDB();
       const transaction = db.transaction([storeName, STORES.CACHE_METADATA], 'readwrite');
@@ -244,6 +272,11 @@ class IndexedDBCacheService {
    * Helper to manage metadata
    */
   private async getMetadata(key: string): Promise<CacheMetadata | null> {
+    if (!INDEXED_DB_SUPPORTED) {
+      warnIndexedDBUnavailable();
+      return null;
+    }
+
     try {
       const db = await this.initDB();
       const transaction = db.transaction([STORES.CACHE_METADATA], 'readonly');
@@ -272,6 +305,11 @@ class IndexedDBCacheService {
    * Cache Flight Club telemetry data
    */
   async cacheFlightClubData(launchId: string, missionId: string, telemetryData: any): Promise<void> {
+    if (!INDEXED_DB_SUPPORTED) {
+      warnIndexedDBUnavailable();
+      return;
+    }
+
     const key = `${launchId}-${missionId}`;
     const cachedData: CachedFlightClubData = {
       launchId,
@@ -289,6 +327,11 @@ class IndexedDBCacheService {
    * Get cached Flight Club telemetry data
    */
   async getFlightClubData(launchId: string, missionId: string): Promise<any | null> {
+    if (!INDEXED_DB_SUPPORTED) {
+      warnIndexedDBUnavailable();
+      return null;
+    }
+
     const key = `${launchId}-${missionId}`;
     const cached = await this.get<CachedFlightClubData>(STORES.FLIGHT_CLUB_DATA, key);
     
@@ -311,6 +354,11 @@ class IndexedDBCacheService {
     visibilityData: VisibilityData, 
     inputHash: string
   ): Promise<void> {
+    if (!INDEXED_DB_SUPPORTED) {
+      warnIndexedDBUnavailable();
+      return;
+    }
+
     const key = `visibility-${launchId}`;
     const cachedData: CachedVisibilityData = {
       launchId,
@@ -328,6 +376,11 @@ class IndexedDBCacheService {
    * Get cached visibility data
    */
   async getVisibilityData(launchId: string, inputHash: string): Promise<VisibilityData | null> {
+    if (!INDEXED_DB_SUPPORTED) {
+      warnIndexedDBUnavailable();
+      return null;
+    }
+
     const key = `visibility-${launchId}`;
     const cached = await this.get<CachedVisibilityData>(STORES.VISIBILITY_CACHE, key);
     
@@ -346,6 +399,11 @@ class IndexedDBCacheService {
    * Cache launch match results
    */
   async cacheLaunchMatch(launchId: string, match: LaunchMatch | null): Promise<void> {
+    if (!INDEXED_DB_SUPPORTED) {
+      warnIndexedDBUnavailable();
+      return;
+    }
+
     const key = `match-${launchId}`;
     const cachedData: CachedLaunchMatch = {
       launchId,
@@ -362,6 +420,11 @@ class IndexedDBCacheService {
    * Get cached launch match
    */
   async getLaunchMatch(launchId: string): Promise<LaunchMatch | null> {
+    if (!INDEXED_DB_SUPPORTED) {
+      warnIndexedDBUnavailable();
+      return null;
+    }
+
     const key = `match-${launchId}`;
     const cached = await this.get<CachedLaunchMatch>(STORES.LAUNCH_MATCHES, key);
     
@@ -380,6 +443,10 @@ class IndexedDBCacheService {
    * Delete an item from cache
    */
   private async delete(storeName: string, key: string): Promise<void> {
+    if (!INDEXED_DB_SUPPORTED) {
+      return;
+    }
+
     try {
       const db = await this.initDB();
       const transaction = db.transaction([storeName, STORES.CACHE_METADATA], 'readwrite');
@@ -399,6 +466,10 @@ class IndexedDBCacheService {
    * Clean up expired entries
    */
   async cleanup(): Promise<number> {
+    if (!INDEXED_DB_SUPPORTED) {
+      return 0;
+    }
+
     try {
       const db = await this.initDB();
       const now = Date.now();
@@ -444,6 +515,15 @@ class IndexedDBCacheService {
    * Get cache statistics
    */
   async getStats(): Promise<CacheStats> {
+    if (!INDEXED_DB_SUPPORTED) {
+      return {
+        totalEntries: 0,
+        totalSize: 0,
+        hitRate: 0,
+        stores: {}
+      };
+    }
+
     try {
       const db = await this.initDB();
       const stats: CacheStats = {
@@ -489,6 +569,11 @@ class IndexedDBCacheService {
    * Clear all cache data
    */
   async clear(): Promise<void> {
+    if (!INDEXED_DB_SUPPORTED) {
+      this.stats = { hits: 0, misses: 0, writes: 0, evictions: 0 };
+      return;
+    }
+
     try {
       const db = await this.initDB();
       
@@ -513,7 +598,18 @@ class IndexedDBCacheService {
    * Create a hash for cache validation
    */
   createHash(data: any): string {
-    return btoa(JSON.stringify(data)).slice(0, 16);
+    const payload = JSON.stringify(data);
+    if (typeof btoa === 'function') {
+      return btoa(payload).slice(0, 16);
+    }
+
+    const bufferFactory = (globalThis as any)?.Buffer;
+    if (bufferFactory) {
+      return bufferFactory.from(payload).toString('base64').slice(0, 16);
+    }
+
+    // Fallback: no hashing available, use plain string slice
+    return payload.slice(0, 16);
   }
 }
 

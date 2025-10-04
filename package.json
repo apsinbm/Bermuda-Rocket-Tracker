@@ -87,5 +87,10 @@
   "overrides": {
     "nth-check": "^2.1.1",
     "resolve-url-loader": "^5.0.0"
+  },
+  "jest": {
+    "testMatch": [
+      "<rootDir>/src/**/*.{test,spec}.{js,jsx,ts,tsx}"
+    ]
   }
 }

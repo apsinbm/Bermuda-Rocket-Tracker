@@ -345,9 +345,9 @@ describe('trajectoryDataFlow integration', () => {
       const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
       const distance = R * c;
       
-      // Should be approximately 1200km between Bermuda and Cape Canaveral
-      expect(distance).toBeGreaterThan(1100);
-      expect(distance).toBeLessThan(1600); // Allow for more variation in distance calculation
+      // Great circle distance should be roughly 1570km between Bermuda and Cape Canaveral
+      expect(distance).toBeGreaterThan(1500);
+      expect(distance).toBeLessThan(1650);
     });
   });
 

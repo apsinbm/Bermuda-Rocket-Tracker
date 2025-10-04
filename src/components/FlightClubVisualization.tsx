@@ -641,7 +641,7 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
       {/* Header with mission info and controls */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold mb-1">Flight Trajectory Analysis</h2>
+          <h2 className="text-2xl font-bold mb-1">FlightClub Trajectory Analysis</h2>
           <div className={`text-sm ${themeClasses.textSecondary}`}>
             {flightClubMission?.description} • {simulationData.enhancedTelemetry.length} telemetry points
           </div>

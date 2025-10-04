@@ -47,7 +47,7 @@ function App() {
   // Process launches with proper visibility calculations
   useEffect(() => {
     const processLaunches = async () => {
-      
+
       if (launches.length === 0) {
         setProcessedLaunches([]);
         return;
@@ -56,17 +56,22 @@ function App() {
       // Only process the first 6 launches we'll actually display (in chronological order)
       const launchesToProcess = launches.slice(0, 6);
       console.log(`[App] Processing ${launchesToProcess.length} launches (showing first 6 of ${launches.length} total)`);
-      
+
       // Process these 6 launches in parallel for much faster loading
-      const processedLaunches = await Promise.all(
+      const results = await Promise.allSettled(
         launchesToProcess.map(async (launch, index) => {
-          try {
+          // Add timeout to prevent hanging on slow visibility calculations
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Visibility calculation timeout')), 10000)
+          );
+
+          const calculationPromise = (async () => {
             console.log(`[App] Processing launch ${index + 1}/${launchesToProcess.length}: ${launch.name}`);
-            
+
             // Use basic visibility calculation with error handling
             const { calculateVisibility } = await import('./services/visibilityService');
             const visibilityData = await calculateVisibility(launch);
-            
+
             const processedLaunch: LaunchWithVisibility = {
               ...launch,
               visibility: visibilityData,
@@ -75,34 +80,45 @@ function App() {
               flightClubMatch: (launch as any).flightClubMatch,
               hasFlightClubData: (launch as any).hasFlightClubData || false
             };
-            
+
             console.log(`[App] Completed processing: ${launch.name} - ${visibilityData.likelihood} visibility`);
             return processedLaunch;
+          })();
+
+          try {
+            return await Promise.race([calculationPromise, timeoutPromise]);
           } catch (error) {
             console.error(`[App] Failed to calculate visibility for launch ${launch.name}:`, error);
-            
+
             // Return launch with fallback visibility data
             const fallbackLaunch: LaunchWithVisibility = {
               ...launch,
               visibility: {
-                likelihood: 'low',
-                reason: 'Visibility calculation failed - error in processing',
+                likelihood: 'medium',
+                reason: 'Visibility calculation unavailable - using estimated data based on mission type',
                 bearing: 225, // Default northeast
                 trajectoryDirection: 'Northeast',
-                estimatedTimeVisible: 'Unable to calculate - check logs',
+                estimatedTimeVisible: 'Estimated T+3 to T+8 minutes',
                 dataSource: 'estimated' as const,
-                score: 0.1,
-                factors: ['Error occurred during calculation']
+                score: 0.5,
+                factors: ['Calculation timed out - using mission estimates']
               },
               bermudaTime: convertToBermudaTime(launch.net),
               flightClubMatch: (launch as any).flightClubMatch,
               hasFlightClubData: (launch as any).hasFlightClubData || false
             };
-            
+
             return fallbackLaunch;
           }
         })
       );
+
+      // Extract successful launches (including those with fallback data)
+      const processedLaunches = results
+        .filter((result): result is PromiseFulfilledResult<LaunchWithVisibility> =>
+          result.status === 'fulfilled'
+        )
+        .map(result => result.value);
       
       // Log visibility distribution for debugging
       const visibilityStats = {

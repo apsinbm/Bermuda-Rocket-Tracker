@@ -22,6 +22,190 @@ import { FlightClubApiService } from './flightClubApiService';
 const BERMUDA_LAT = 32.3078;
 const BERMUDA_LNG = -64.7505;
 
+const SCORE_BY_LIKELIHOOD: Record<VisibilityData['likelihood'], number> = {
+  high: 0.9,
+  medium: 0.6,
+  low: 0.35,
+  none: 0
+};
+
+const FLORIDA_LAUNCH_KEYWORDS = [
+  'florida',
+  'cape canaveral',
+  'kennedy',
+  'ksc',
+  'ccafs',
+  'space force station',
+  'patrick space force base',
+  'merritt island',
+  'port canaveral',
+  'wallops',
+  'virginia'
+];
+
+function ensureFactor(factors: string[], value: string): void {
+  if (!factors.some(factor => factor === value)) {
+    factors.push(value);
+  }
+}
+
+function isFloridaLaunch(launch: Launch | LaunchWithFlightClub): boolean {
+  const locationName = launch.pad?.location?.name?.toLowerCase() || '';
+  const padName = launch.pad?.name?.toLowerCase() || '';
+  const combined = `${locationName} ${padName}`.trim();
+
+  if (!combined) {
+    return false;
+  }
+
+  return FLORIDA_LAUNCH_KEYWORDS.some(keyword => combined.includes(keyword));
+}
+
+type OrbitClassification = 'gto' | 'leo' | 'polar' | 'interplanetary' | 'unknown' | 'other';
+
+function classifyOrbit(launch: Launch | LaunchWithFlightClub): OrbitClassification {
+  const orbitName = launch.mission?.orbit?.name?.toLowerCase().trim() || '';
+  const missionName = launch.mission?.name?.toLowerCase() || '';
+  const description = launch.mission?.description?.toLowerCase() || '';
+  const missionTokens = missionName.split(/[^a-z0-9]+/).filter(Boolean);
+  const descriptionTokens = description.split(/[^a-z0-9]+/).filter(Boolean);
+  const hasToken = (tokens: string[], token: string) => tokens.includes(token);
+
+  let classification: OrbitClassification;
+
+  if (!orbitName && !missionName) {
+    classification = 'unknown';
+  } else if (orbitName.includes('gto') || orbitName.includes('transfer') ||
+             orbitName.includes('geosynchronous') || orbitName.includes('geo')) {
+    classification = 'gto';
+  } else if (orbitName.includes('sso') || orbitName.includes('sun-synchronous') ||
+             orbitName.includes('polar') || hasToken(missionTokens, 'polar') || hasToken(descriptionTokens, 'polar')) {
+    classification = 'polar';
+  } else if (orbitName.includes('leo') || orbitName.includes('low earth') ||
+             hasToken(missionTokens, 'starlink') || hasToken(missionTokens, 'crew') ||
+             hasToken(missionTokens, 'iss') || description.includes('low earth')) {
+    classification = 'leo';
+  } else if (orbitName.includes('heliocentric') || orbitName.includes('interplanetary') ||
+             hasToken(missionTokens, 'mars') || hasToken(missionTokens, 'venus') ||
+             hasToken(missionTokens, 'asteroid') || description.includes('interplanetary')) {
+    classification = 'interplanetary';
+  } else if (!orbitName) {
+    classification = 'unknown';
+  } else {
+    classification = 'other';
+  }
+
+  // eslint-disable-next-line no-console
+  console.debug('[VisibilityService] classifyOrbit', { orbit: orbitName, mission: missionName, classification });
+  return classification;
+}
+
+function normalizeVisibilityOutput(launch: Launch | LaunchWithFlightClub, baseData: VisibilityData): VisibilityData {
+  const normalized: VisibilityData = {
+    ...baseData,
+    dataSource: baseData.dataSource ?? 'calculated'
+  };
+
+  const factors = Array.isArray(normalized.factors) ? [...normalized.factors] : [];
+
+  const launchTime = new Date(launch.net ?? '');
+  const launchTimeIsValid = !Number.isNaN(launchTime.valueOf());
+  const lightingStatus = launchTimeIsValid ? getLightingStatusSync(launch.net || new Date().toISOString()) : 'night';
+
+  if (normalized.estimatedTimeVisible && !factors.some(f => f.startsWith('Visibility duration:'))) {
+    ensureFactor(factors, `Visibility duration: ${normalized.estimatedTimeVisible}`);
+  }
+
+  // Preserve ISS overrides without additional normalization changes
+  if ((normalized.dataSource as any) === 'iss-override') {
+    normalized.factors = Array.from(new Set(factors));
+    normalized.score = normalized.score ?? SCORE_BY_LIKELIHOOD[normalized.likelihood];
+    return normalized;
+  }
+
+  if (!launchTimeIsValid) {
+    ensureFactor(factors, 'Launch time invalid');
+    normalized.likelihood = 'none';
+    normalized.reason = 'Launch time invalid - unable to calculate Bermuda visibility.';
+  }
+
+  if (lightingStatus === 'day') {
+    ensureFactor(factors, 'Daylight reduces visibility');
+  } else if (lightingStatus === 'twilight') {
+    ensureFactor(factors, 'Twilight provides ideal exhaust plume illumination');
+  } else {
+    ensureFactor(factors, 'Nighttime viewing enhances visibility');
+  }
+
+  const orbitClass = classifyOrbit(launch);
+
+  switch (orbitClass) {
+    case 'polar': {
+      ensureFactor(factors, 'Polar/SSO trajectory not visible from Bermuda');
+      normalized.likelihood = 'none';
+      normalized.reason = 'Polar/SSO trajectory not visible from Bermuda';
+      break;
+    }
+    case 'leo': {
+      ensureFactor(factors, 'LEO trajectory has limited visibility from Bermuda');
+      if (normalized.likelihood === 'high' || normalized.likelihood === 'medium') {
+        normalized.likelihood = 'low';
+      }
+      if (!normalized.reason) {
+        normalized.reason = 'LEO trajectories pass north of Bermuda at relatively low altitude, making visibility difficult.';
+      }
+      break;
+    }
+    case 'gto': {
+      ensureFactor(factors, 'High-energy GTO trajectory favors Bermuda visibility');
+      if (lightingStatus === 'day') {
+        normalized.likelihood = 'medium';
+      } else if (normalized.likelihood === 'low') {
+        normalized.likelihood = 'high';
+      }
+      break;
+    }
+    case 'interplanetary': {
+      ensureFactor(factors, 'High-energy interplanetary trajectory provides good visibility');
+      if (normalized.likelihood === 'low') {
+        normalized.likelihood = lightingStatus === 'day' ? 'medium' : 'high';
+      }
+      break;
+    }
+    case 'unknown': {
+      ensureFactor(factors, 'Unknown orbit type');
+      normalized.likelihood = 'none';
+      normalized.reason = 'Unknown orbit type - defaulting to not visible from Bermuda';
+      break;
+    }
+    default:
+      break;
+  }
+
+  if (!isFloridaLaunch(launch)) {
+    ensureFactor(factors, 'Launch not from Florida');
+    normalized.likelihood = 'none';
+    normalized.reason = 'Launch not visible from Bermuda because the launch site is outside the Florida east coast corridor.';
+  }
+
+  if (lightingStatus === 'twilight' && normalized.likelihood === 'high') {
+    normalized.likelihood = 'medium';
+  }
+
+  normalized.factors = Array.from(new Set(factors));
+  normalized.score = SCORE_BY_LIKELIHOOD[normalized.likelihood];
+
+  // eslint-disable-next-line no-console
+  console.debug('[VisibilityService] normalize', {
+    id: launch.id,
+    orbitClass,
+    lightingStatus,
+    likelihood: normalized.likelihood
+  });
+
+  return normalized;
+}
+
 // Known launch pads and their typical trajectories
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const LAUNCH_PADS: Record<string, LaunchPad> = {
@@ -89,7 +273,7 @@ function isTrajectoryVisible(padLocation: { latitude: number; longitude: number 
   // Florida: ~900 miles, Wallops: ~600 miles
   // Visibility ring at 150-200km altitude: ~1,400-1,600km  
   // Convert to miles: ~870-990 miles, so pad distance + trajectory extension
-  return distance > 400 && distance < 1200; // Expanded range for Wallops
+  return distance > 400 && distance < 1800; // Expanded range to reflect 2nd stage visibility ring
 }
 
 interface TrajectoryInfo {
@@ -570,7 +754,8 @@ export async function calculateVisibility(launch: Launch | LaunchWithFlightClub)
     const cachedVisibility = await indexedDBCache.getVisibilityData(launch.id, inputHash);
     if (cachedVisibility) {
       console.log(`[VisibilityService] Using cached visibility for ${launch.name} (${cachedVisibility.dataSource})`);
-      return cachedVisibility as EnhancedVisibilityData;
+      const normalizedCached = normalizeVisibilityOutput(launch, cachedVisibility);
+      return enhanceVisibilityData(normalizedCached);
     }
   } catch (cacheError) {
     console.warn('[VisibilityService] Cache read failed:', cacheError);
@@ -583,6 +768,7 @@ export async function calculateVisibility(launch: Launch | LaunchWithFlightClub)
       const flightClubResult = await calculateVisibilityFromFlightClub(launch as LaunchWithFlightClub);
       if (flightClubResult) {
         console.log(`[VisibilityService] ✅ Using Flight Club data for ${launch.name} (${flightClubResult.likelihood} visibility)`);
+        const normalizedFlightClub = normalizeVisibilityOutput(launch, flightClubResult);
         
         // Cache the result
         try {
@@ -594,12 +780,12 @@ export async function calculateVisibility(launch: Launch | LaunchWithFlightClub)
             hasFlightClubData: true,
             missionId: launch.flightClubMatch.flightClubMission.id
           });
-          await indexedDBCache.cacheVisibilityData(launch.id, flightClubResult, inputHash);
+          await indexedDBCache.cacheVisibilityData(launch.id, normalizedFlightClub, inputHash);
         } catch (cacheError) {
           console.warn('[VisibilityService] Failed to cache Flight Club result:', cacheError);
         }
         
-        return flightClubResult as EnhancedVisibilityData;
+        return enhanceVisibilityData(normalizedFlightClub);
       }
       console.log(`[VisibilityService] ⚠️ Flight Club calculation failed for ${launch.name}, falling back to geometric`);
     }
@@ -636,6 +822,7 @@ export async function calculateVisibility(launch: Launch | LaunchWithFlightClub)
         ...(geometricResult.factors.visibilityReason ? [`2nd stage timing: ${geometricResult.factors.visibilityReason}`] : [])
       ]
     };
+    const normalizedVisibility = normalizeVisibilityOutput(launch, visibilityResult);
     
     // Cache the geometric result
     try {
@@ -647,12 +834,12 @@ export async function calculateVisibility(launch: Launch | LaunchWithFlightClub)
         hasFlightClubData: ('hasFlightClubData' in launch) ? launch.hasFlightClubData : false,
         missionId: ('flightClubMatch' in launch) ? launch.flightClubMatch?.flightClubMission.id : null
       });
-      await indexedDBCache.cacheVisibilityData(launch.id, visibilityResult, inputHash);
+      await indexedDBCache.cacheVisibilityData(launch.id, normalizedVisibility, inputHash);
     } catch (cacheError) {
       console.warn('[VisibilityService] Failed to cache geometric result:', cacheError);
     }
     
-    return visibilityResult as EnhancedVisibilityData;
+    return enhanceVisibilityData(normalizedVisibility);
     
   } catch (error) {
     console.error('[VisibilityService] Geometric calculation failed, using fallback:', error);
@@ -687,13 +874,17 @@ export async function calculateVisibility(launch: Launch | LaunchWithFlightClub)
       const trajectoryMapping = getTrajectoryMapping(launch);
       const viewingBearing = getViewingBearingFromBermuda(trajectoryMapping);
       
-      return enhanceVisibilityData({
+      const fallbackVisibility: VisibilityData = {
         likelihood,
         reason: reasonText,
         bearing: Math.round(viewingBearing),
         trajectoryDirection: trajectoryInfo.direction,
-        estimatedTimeVisible: timeVisible
-      });
+        estimatedTimeVisible: timeVisible,
+        dataSource: 'estimated'
+      };
+
+      const normalizedFallback = normalizeVisibilityOutput(launch, fallbackVisibility);
+      return enhanceVisibilityData(normalizedFallback);
     }
     
     // Use viewing bearing from trajectory mapping for accurate directions
@@ -733,13 +924,17 @@ export async function calculateVisibility(launch: Launch | LaunchWithFlightClub)
       reason = `Limited visibility conditions for ${trajectoryInfo.direction.toLowerCase()} trajectory`;
     }
     
-    return enhanceVisibilityData({
+    const fallbackVisibility: VisibilityData = {
       likelihood,
       reason,
       bearing: Math.round(bearing),
       trajectoryDirection: trajectoryInfo.direction,
-      estimatedTimeVisible: lightingStatus !== 'day' ? '2nd stage visible approximately T+2.5 to T+8 minutes (estimated)' : 'Challenging to see in daylight - look for bright dot'
-    });
+      estimatedTimeVisible: lightingStatus !== 'day' ? '2nd stage visible approximately T+2.5 to T+8 minutes (estimated)' : 'Challenging to see in daylight - look for bright dot',
+      dataSource: 'estimated'
+    };
+
+    const normalizedFallback = normalizeVisibilityOutput(launch, fallbackVisibility);
+    return enhanceVisibilityData(normalizedFallback);
   }
 }
 
@@ -763,7 +958,7 @@ export function calculateVisibilitySync(launch: Launch): VisibilityData {
       reason = 'ISS mission with daylight viewing - look for bright moving dot. Northeast trajectory passes west of Bermuda at high altitude (~200km). Look WSW around T+3-8 minutes.';
     }
     
-    return {
+    return normalizeVisibilityOutput(launch, {
       likelihood,
       reason,
       bearing: 247, // WSW bearing for ISS trajectories from Bermuda
@@ -777,7 +972,7 @@ export function calculateVisibilitySync(launch: Launch): VisibilityData {
         'High altitude second stage (~200km)',
         `${lightingStatus} lighting conditions`
       ]
-    };
+    });
   }
   
   // Extract coordinates using helper function
@@ -814,13 +1009,14 @@ export function calculateVisibilitySync(launch: Launch): VisibilityData {
     const trajMapping = getTrajMapping(launch);
     const viewBearing = getViewBearing(trajMapping);
     
-    return {
+    return normalizeVisibilityOutput(launch, {
       likelihood,
       reason: reasonText,
       bearing: Math.round(viewBearing),
       trajectoryDirection: trajectoryInfo.direction,
-      estimatedTimeVisible: timeVisible
-    };
+      estimatedTimeVisible: timeVisible,
+      dataSource: 'estimated'
+    });
   }
   
   // Convert launch time to Bermuda time (AST/ADT - UTC-4 in summer, UTC-3 in winter)
@@ -829,10 +1025,10 @@ export function calculateVisibilitySync(launch: Launch): VisibilityData {
   
   // Check if launch trajectory could be visible from Bermuda
   if (!isTrajectoryVisible({ latitude: coordinates.latitude, longitude: coordinates.longitude })) {
-    return {
+    return normalizeVisibilityOutput(launch, {
       likelihood: 'none',
       reason: 'Launch trajectory not visible from Bermuda'
-    };
+    });
   }
   
   const lightingStatus = getLightingStatusSync(launch.net);
@@ -868,13 +1064,14 @@ export function calculateVisibilitySync(launch: Launch): VisibilityData {
     reason = 'Limited visibility conditions';
   }
   
-  return {
+  return normalizeVisibilityOutput(launch, {
     likelihood,
     reason,
     bearing: Math.round(bearing),
     trajectoryDirection: trajectoryInfo.direction,
-    estimatedTimeVisible: lightingStatus !== 'day' ? '2nd stage visible approximately T+2.5 to T+8 minutes (estimated)' : 'Challenging to see in daylight - look for bright dot'
-  };
+    estimatedTimeVisible: lightingStatus !== 'day' ? '2nd stage visible approximately T+2.5 to T+8 minutes (estimated)' : 'Challenging to see in daylight - look for bright dot',
+    dataSource: 'calculated'
+  });
 }
 
 export function getBearingDirection(bearing: number): string {
@@ -958,7 +1155,8 @@ async function getLightingStatus(launchTimeStr: string): Promise<'twilight' | 'n
  * Synchronous version of lighting status for legacy compatibility
  */
 function getLightingStatusSync(launchTimeStr: string): 'twilight' | 'night' | 'day' {
-  const hour = new Date(launchTimeStr).getUTCHours();
+  const date = new Date(launchTimeStr);
+  const hour = Number.isNaN(date.valueOf()) ? 0 : date.getHours();
   if (hour >= 6 && hour <= 18) return 'day';
   if ((hour >= 5 && hour < 6) || (hour > 18 && hour <= 20)) return 'twilight';
   return 'night';

@@ -44,3 +44,22 @@ expect.extend({
     }
   },
 });
+
+if (typeof HTMLCanvasElement !== 'undefined') {
+  const originalGetContext = HTMLCanvasElement.prototype.getContext;
+  HTMLCanvasElement.prototype.getContext = (function getContextOverride(this: HTMLCanvasElement, type: string, ...args: unknown[]) {
+    if (type === '2d') {
+      return {
+        fillRect: () => undefined,
+        clearRect: () => undefined,
+        getImageData: () => ({ data: [] }),
+        putImageData: () => undefined,
+        createImageData: () => ({}),
+        setTransform: () => undefined,
+        drawImage: () => undefined
+      } as unknown as CanvasRenderingContext2D;
+    }
+
+    return originalGetContext ? (originalGetContext as any).call(this, type, ...args) : null;
+  } as unknown as (typeof HTMLCanvasElement.prototype.getContext));
+}

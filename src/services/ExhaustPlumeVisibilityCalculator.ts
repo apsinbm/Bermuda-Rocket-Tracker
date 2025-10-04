@@ -33,14 +33,23 @@ export class ExhaustPlumeVisibilityCalculator {
   static async calculatePlumeVisibility(launch: Launch): Promise<VisibilityData & { plumeWindow: PlumeVisibilityWindow; timingInfo: LaunchTimingInfo }> {
     const launchTime = new Date(launch.net);
     const launchDate = new Date(launchTime.getFullYear(), launchTime.getMonth(), launchTime.getDate());
-    
-    // Use government solar service for accurate sun times with fallback
+
+    // Use government solar service for accurate sun times with fallback and timeout
     let sunTimes;
     try {
       const { GovernmentSolarService } = await import('./governmentSolarService');
-      sunTimes = await GovernmentSolarService.getSolarDataForDate(launchDate);
+
+      // Add 5 second timeout to prevent hanging
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Solar data fetch timeout')), 5000)
+      );
+
+      sunTimes = await Promise.race([
+        GovernmentSolarService.getSolarDataForDate(launchDate),
+        timeoutPromise
+      ]);
     } catch (error) {
-      console.error('[ExhaustPlume] Solar data fetch failed, using fallback:', error);
+      console.warn('[ExhaustPlume] Solar data fetch failed, using fallback:', error);
       // Fallback to simple calculated sun times for Bermuda
       const { getAccurateSunTimes } = await import('../utils/accurateSunTimes');
       const fallbackTimes = getAccurateSunTimes(launchDate);

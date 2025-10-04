@@ -241,7 +241,11 @@ window.location.reload();
 3. Clear cache using debug panel button
 4. Check browser console for errors
 
-**Known Issue (September 7, 2025)**: App shows "No Upcoming Launches" despite debug panel showing 30 launches. This appears to be related to async visibility calculations with the ExhaustPlumeVisibilityCalculator requiring solar data fetching. Investigation pending.
+**FIXED (October 4, 2025)**: Resolved async visibility calculation timeouts that caused launches not to display. Added:
+- 10-second timeout on visibility calculations with fallback data
+- 5-second timeout on solar data API calls
+- Promise.allSettled for parallel processing with graceful failures
+- Better error handling showing launches even when calculations timeout
 
 ### API Rate Limiting
 - App uses intelligent caching to minimize API calls

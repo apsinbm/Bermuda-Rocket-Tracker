@@ -298,9 +298,9 @@ describe('imageAnalysisService', () => {
       const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
       const distance = R * c;
       
-      // Should be approximately 1200km
-      expect(distance).toBeGreaterThan(1100);
-      expect(distance).toBeLessThan(1300);
+      // Great circle distance should be roughly 1570km
+      expect(distance).toBeGreaterThan(1500);
+      expect(distance).toBeLessThan(1650);
     });
 
     test('should calculate bearing correctly', () => {
