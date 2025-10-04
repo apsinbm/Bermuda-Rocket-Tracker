@@ -62,7 +62,9 @@ interface RefreshSummary {
 function authorize(request: VercelRequest): boolean {
   const secret = process.env.CRON_SECRET;
   if (!secret) {
-    return true;
+    // Fail closed: if CRON_SECRET is not configured, reject all requests
+    console.error('CRON_SECRET environment variable is not configured');
+    return false;
   }
   const provided = request.headers['authorization'];
   return provided === `Bearer ${secret}`;

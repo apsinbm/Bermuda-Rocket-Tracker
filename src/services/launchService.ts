@@ -20,9 +20,9 @@ export function clearLaunchCache(): void {
 }
 
 export async function fetchAllEastCoastLaunches(limit: number = 30): Promise<Launch[]> {
-  // Check cache first
-  if (launchCache && Date.now() < launchCache.expiresAt) {
-    return launchCache.data;
+  // Check cache first - ensure cached data has enough entries for requested limit
+  if (launchCache && Date.now() < launchCache.expiresAt && launchCache.data.length >= limit) {
+    return launchCache.data.slice(0, limit);
   }
 
   try {
@@ -88,12 +88,11 @@ export async function fetchAllEastCoastLaunches(limit: number = 30): Promise<Lau
       return isUpcoming && isEastCoastLocation;
     });
 
-    // Sort by launch date
+    // Sort by launch date (keep ALL launches for cache)
     const sortedLaunches = filteredLaunches
-      .sort((a: Launch, b: Launch) => new Date(a.net).getTime() - new Date(b.net).getTime())
-      .slice(0, limit); // Limit final results
+      .sort((a: Launch, b: Launch) => new Date(a.net).getTime() - new Date(b.net).getTime());
 
-    // Update cache
+    // Update cache with ALL filtered launches
     const now = Date.now();
     launchCache = {
       data: sortedLaunches,
@@ -101,16 +100,19 @@ export async function fetchAllEastCoastLaunches(limit: number = 30): Promise<Lau
       expiresAt: now + CACHE_DURATION
     };
 
-    // Log provider breakdown
-    const providerCounts = sortedLaunches.reduce((acc: Record<string, number>, launch: Launch) => {
+    // Return only the requested limit
+    const limitedResults = sortedLaunches.slice(0, limit);
+
+    // Log provider breakdown (using limited results)
+    const providerCounts = limitedResults.reduce((acc: Record<string, number>, launch: Launch) => {
       const provider = launch.launch_service_provider?.name || 'Unknown';
       acc[provider] = (acc[provider] || 0) + 1;
       return acc;
     }, {});
 
-    console.log(`[LaunchService] Loaded ${sortedLaunches.length} upcoming East Coast launches from ALL providers:`, providerCounts);
+    console.log(`[LaunchService] Returning ${limitedResults.length} of ${sortedLaunches.length} cached East Coast launches:`, providerCounts);
 
-    return sortedLaunches;
+    return limitedResults;
 
   } catch (error) {
     console.error('[LaunchService] Error fetching East Coast launches:', error);

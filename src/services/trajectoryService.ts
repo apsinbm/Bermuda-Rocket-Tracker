@@ -377,7 +377,7 @@ async function fetchSpaceLaunchScheduleImage(launchLibraryId: string, launch?: L
         
         const response = await fetch(url, {
           headers: {
-            'User-Agent': 'Mozilla/5.0 (compatible; BermudaRocketTracker/1.0)',
+            // Removed 'User-Agent' - forbidden header in browsers, causes TypeError
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
           },
           signal: controller.signal
