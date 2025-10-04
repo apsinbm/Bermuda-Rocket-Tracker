@@ -183,7 +183,14 @@ const EventMarkers: React.FC<{
 
   const eventPositions = useMemo(() => {
     return events
-      .filter(event => event.importance === 'critical' || event.importance === 'major')
+      .filter(event => {
+        // Show only key events (MECO, SECO, Separation, Deployment)
+        const eventName = event.event.toLowerCase();
+        return eventName.includes('meco') ||
+               eventName.includes('seco') ||
+               eventName.includes('separation') ||
+               eventName.includes('deploy');
+      })
       .map(event => {
         // Find telemetry frame closest to event time
         const frame = telemetry.find(f => Math.abs(f.time - event.time) < 5) || telemetry[0];
