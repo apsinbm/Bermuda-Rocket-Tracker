@@ -131,6 +131,15 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
     setScene3DReady(false);
   }, [loading]);
 
+  // Set scene ready when simulation data is loaded
+  useEffect(() => {
+    if (simulationData && simulationData.enhancedTelemetry.length > 0) {
+      // Small delay to ensure Canvas is mounted
+      const timer = setTimeout(() => setScene3DReady(true), 300);
+      return () => clearTimeout(timer);
+    }
+  }, [simulationData]);
+
   // Load FlightClub data
   useEffect(() => {
     const loadFlightClubData = async () => {
@@ -600,18 +609,6 @@ const FlightClubVisualization: React.FC<FlightClubVisualizationProps> = ({
               performance={canvasConfig.performance}
               style={canvasConfig.style}
               className="relative z-10 h-full w-full"
-              onCreated={(state) => {
-                const checkReady = () => {
-                  if (simulationData?.enhancedTelemetry?.length > 0) {
-                    setScene3DReady(true);
-                  } else {
-                    setTimeout(() => setScene3DReady(true), 800);
-                  }
-                };
-
-                setTimeout(checkReady, 500);
-                setTimeout(checkReady, 1200);
-              }}
             >
               <Trajectory3DScene
                 simulationData={simulationData}
